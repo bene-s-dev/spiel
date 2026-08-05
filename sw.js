@@ -1,5 +1,5 @@
 // Network-first Service Worker – always get fresh code, never block with stale cache
-const CACHE_NAME = 'seiltanzer-3d-v110000';
+const CACHE_NAME = 'seiltanzer-3d-v999777';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
