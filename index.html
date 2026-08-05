@@ -11,17 +11,19 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
   
-  <!-- Three.js 3D Engine & GLTF / FBX Loaders -->
+  <!-- Three.js 3D Engine & GLTF Loader -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
+  <!-- MeshoptDecoder – required for gltf-transform meshopt compressed GLB -->
+  <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.18.1/meshopt_decoder.js"></script>
   <script>
-    if (typeof fflate !== 'undefined') {
-      window.fflate = fflate;
-      if (typeof THREE !== 'undefined') THREE.fflate = fflate;
+    // Wire up MeshoptDecoder so GLTFLoader can decode compressed geometry
+    if (typeof MeshoptDecoder !== 'undefined') {
+      THREE.GLTFLoader.prototype._origLoad = THREE.GLTFLoader.prototype.load;
+      window._meshoptReady = MeshoptDecoder.ready || Promise.resolve();
+      window._meshoptDecoder = MeshoptDecoder;
     }
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
 </head>
 <body>
 
