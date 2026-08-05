@@ -339,25 +339,27 @@ class SeiltanzerGame {
       this.spine2Bone = null;
 
       this.femaleModel.traverse((child) => {
-        const bName = child.name.toLowerCase();
+        // Exact Mixamo bone names: mixamorig2:LeftUpLeg etc.
+        const n = child.name;
+        const bName = n.toLowerCase().replace(/mixamorig\d*:/g, '');
 
         if (child.rotation) {
           child.userData.initRotation = child.rotation.clone();
         }
 
-        if (bName.includes('leftupleg') || bName.includes('thigh_l') || (bName.includes('left') && bName.includes('upleg'))) {
+        if (bName === 'leftupleg') {
           this.leftUpLegBone = child;
-        } else if ((bName.includes('leftleg') || bName.includes('shin_l')) && !bName.includes('up')) {
+        } else if (bName === 'leftleg') {
           this.leftLegBone = child;
-        } else if (bName.includes('rightupleg') || bName.includes('thigh_r') || (bName.includes('right') && bName.includes('upleg'))) {
+        } else if (bName === 'rightupleg') {
           this.rightUpLegBone = child;
-        } else if ((bName.includes('rightleg') || bName.includes('shin_r')) && !bName.includes('up')) {
+        } else if (bName === 'rightleg') {
           this.rightLegBone = child;
-        } else if (bName.includes('spine1')) {
+        } else if (bName === 'spine1') {
           this.spine1Bone = child;
-        } else if (bName.includes('spine2')) {
+        } else if (bName === 'spine2') {
           this.spine2Bone = child;
-        } else if (bName.includes('spine') && !this.spine1Bone) {
+        } else if (bName === 'spine' && !this.spine1Bone) {
           this.spine1Bone = child;
         }
 
@@ -369,6 +371,7 @@ class SeiltanzerGame {
           }
         }
       });
+      console.log('Bones found - LeftUpLeg:', !!this.leftUpLegBone, 'RightUpLeg:', !!this.rightUpLegBone, 'Spine1:', !!this.spine1Bone);
 
       const box = new THREE.Box3().setFromObject(this.femaleModel);
       const size = box.getSize(new THREE.Vector3());
@@ -546,40 +549,28 @@ class SeiltanzerGame {
     let toastShown = false;
 
     const handleOrientation = (e) => {
-      const gamma = e.gamma !== null && e.gamma !== undefined ? e.gamma : e.beta;
-      if (gamma !== null && gamma !== undefined) {
-        if (!toastShown) {
-          toastShown = true;
-          this.showToast("📱 Gyroskop erkannt!");
-        }
+      // gamma = left/right tilt (landscape), beta = front/back tilt (portrait)
+      // For a phone held upright (portrait), gamma is the left/right tilt we want
+      const raw = e.gamma;
+      if (raw === null || raw === undefined) return;
+
+      if (!toastShown) {
+        toastShown = true;
         this.gyroActive = true;
-        this.rawGamma = gamma;
-        
-        let deltaGamma = gamma - this.calibrationGamma;
-        let norm = deltaGamma / 18.0;
-        this.targetTiltInput = Math.max(-1.0, Math.min(1.0, norm));
+        this.calibrationGamma = raw; // auto-calibrate on first reading
+        this.showToast('📱 Gyroskop aktiv!');
       }
+
+      this.gyroActive = true;
+      this.rawGamma = raw;
+
+      const delta = raw - this.calibrationGamma;
+      // ÷15 so ±15° = full tilt input
+      this.targetTiltInput = Math.max(-1.0, Math.min(1.0, delta / 15.0));
     };
 
     window.addEventListener('deviceorientation', handleOrientation, true);
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
-
-    window.addEventListener('devicemotion', (e) => {
-      if (e.accelerationIncludingGravity && e.accelerationIncludingGravity.x !== null) {
-        const accelX = e.accelerationIncludingGravity.x;
-        if (Math.abs(accelX) > 0.25) {
-          if (!toastShown) {
-            toastShown = true;
-            this.showToast("📱 Beschleunigungssensor erkannt!");
-          }
-          this.gyroActive = true;
-          const norm = Math.max(-1.0, Math.min(1.0, accelX / 4.0));
-          if (!this.rawGamma) {
-            this.targetTiltInput = norm;
-          }
-        }
-      }
-    }, true);
   }
 
   /* -------------------------------------------------- */
