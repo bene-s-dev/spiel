@@ -14,16 +14,6 @@
   <!-- Three.js 3D Engine & GLTF Loader -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <!-- MeshoptDecoder – required for gltf-transform meshopt compressed GLB -->
-  <script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.18.1/meshopt_decoder.js"></script>
-  <script>
-    // Wire up MeshoptDecoder so GLTFLoader can decode compressed geometry
-    if (typeof MeshoptDecoder !== 'undefined') {
-      THREE.GLTFLoader.prototype._origLoad = THREE.GLTFLoader.prototype.load;
-      window._meshoptReady = MeshoptDecoder.ready || Promise.resolve();
-      window._meshoptDecoder = MeshoptDecoder;
-    }
-  </script>
 </head>
 <body>
 

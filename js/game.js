@@ -399,29 +399,14 @@ class SeiltanzerGame {
 
     if (typeof THREE.GLTFLoader !== 'undefined') {
       const loader = new THREE.GLTFLoader();
-
-      // Required for gltf-transform meshopt compressed GLB
-      if (typeof MeshoptDecoder !== 'undefined') {
-        const ready = MeshoptDecoder.ready || Promise.resolve();
-        ready.then(() => {
-          loader.setMeshoptDecoder(MeshoptDecoder);
-          loader.load(
-            './assets/character.glb',
-            (gltf) => setupModel(gltf.scene),
-            handleProgress,
-            (err) => console.error("GLB Load error:", err)
-          );
-        });
-      } else {
-        loader.load(
-          './assets/character.glb',
-          (gltf) => setupModel(gltf.scene),
-          handleProgress,
-          (err) => console.error("GLB Load error:", err)
-        );
-      }
+      loader.load(
+        './assets/character.glb',
+        (gltf) => setupModel(gltf.scene),
+        handleProgress,
+        (err) => { console.error('GLB Load error:', err); this.showToast('⚠️ Modell-Fehler!'); }
+      );
     } else {
-      console.error("THREE.GLTFLoader not found!");
+      console.error('THREE.GLTFLoader not found!');
     }
   }
 
