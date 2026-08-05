@@ -1,3 +1,5 @@
 .DS_Store
+node_modules/
+package-lock.json
 *.fbx.gz
 compress_fbx.py
