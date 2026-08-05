@@ -6,8 +6,8 @@ import threading
 CACHE_SECONDS = 3600  # 1 hour browser cache for heavy assets
 
 class SmartHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass  # silent
+    # Enabled logging for diagnostics
+    pass
 
     def do_GET(self):
         clean_path = self.path.split('?')[0]
@@ -39,18 +39,19 @@ class SmartHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().do_GET()
 
     def end_headers(self):
-        path = self.path.split('?')[0]
-        if path.endswith(('.html', '.js', '.css')):
-            self.send_header('Cache-Control', 'no-cache')
-        elif path.endswith(('.glb', '.fbx', '.png', '.jpg', '.webp')):
-            self.send_header('Cache-Control', f'public, max-age={CACHE_SECONDS}')
+        path = getattr(self, 'path', '').split('?')[0]
+        if path:
+            if path.endswith(('.html', '.js', '.css')):
+                self.send_header('Cache-Control', 'no-cache')
+            elif path.endswith(('.glb', '.fbx', '.png', '.jpg', '.webp')):
+                self.send_header('Cache-Control', f'public, max-age={CACHE_SECONDS}')
         self.send_header('Access-Control-Allow-Origin', '*')
         super().end_headers()
 
 def start_http_server(port):
     try:
         server_address = ('0.0.0.0', port)
-        httpd = http.server.HTTPServer(server_address, SmartHTTPRequestHandler)
+        httpd = http.server.ThreadingHTTPServer(server_address, SmartHTTPRequestHandler)
         print(f"✅ HTTP Server (No SSL warnings) active on http://0.0.0.0:{port}")
         httpd.serve_forever()
     except Exception as e:
@@ -59,7 +60,7 @@ def start_http_server(port):
 def start_https_server(port):
     try:
         server_address = ('0.0.0.0', port)
-        httpd = http.server.HTTPServer(server_address, SmartHTTPRequestHandler)
+        httpd = http.server.ThreadingHTTPServer(server_address, SmartHTTPRequestHandler)
 
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         context.load_cert_chain(certfile='server.pem', keyfile='server.pem')

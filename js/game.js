@@ -42,7 +42,7 @@ class SeiltanzerGame {
     this.jumpY = 0;
     this.jumpVY = 0;
     this.gravity = -22;
-    this.jumpPower = 8.5;
+    this.jumpPower = 9.2;
     this.inAirTrick = null;
     this.isSquatting = false;
     this.squatTimer = 0;
@@ -70,6 +70,9 @@ class SeiltanzerGame {
     
     // Animation Loop
     this.clock = new THREE.Clock();
+    
+    this.onWindowResize();
+
     requestAnimationFrame((t) => this.animate(t));
   }
 
@@ -78,6 +81,7 @@ class SeiltanzerGame {
   /* -------------------------------------------------- */
   initDOM() {
     this.dom = {
+      gameUi: document.getElementById('game-ui'),
       valDistance: document.getElementById('val-distance'),
       valScore: document.getElementById('val-score'),
       balanceNeedle: document.getElementById('balance-needle'),
@@ -124,7 +128,11 @@ class SeiltanzerGame {
       modelLoader: document.getElementById('model-loader'),
       loaderStatus: document.getElementById('loader-status'),
       loaderPercent: document.getElementById('loader-percent'),
-      loaderBarFill: document.getElementById('loader-bar-fill')
+      loaderBarFill: document.getElementById('loader-bar-fill'),
+      btnSettingsToggle: document.getElementById('btn-settings-toggle'),
+      startSettingsPanel: document.getElementById('start-settings-panel'),
+      btnStartToggleMusic: document.getElementById('btn-start-toggle-music'),
+      btnStartToggleSFX: document.getElementById('btn-start-toggle-sfx')
     };
 
     this.musicEnabled = true;
@@ -148,6 +156,12 @@ class SeiltanzerGame {
     } catch(err) {
       console.warn('Audio init warning:', err);
     }
+    try {
+      this.fallSound = new Audio('assets/fall.mp3');
+      this.fallSound.volume = 0.85;
+    } catch(err) {
+      console.warn('Fall audio init warning:', err);
+    }
   }
 
   playMusic() {
@@ -166,6 +180,9 @@ class SeiltanzerGame {
     if (this.state !== GAME_STATE.PLAYING) return;
     this.state = GAME_STATE.PAUSED;
     if (this.bgMusic) this.bgMusic.pause();
+    if (this.windSoundGain) {
+      this.windSoundGain.gain.value = 0;
+    }
     if (this.dom.pauseModal) this.dom.pauseModal.classList.remove('hidden');
   }
 
@@ -189,6 +206,17 @@ class SeiltanzerGame {
     }
   }
 
+  toggleSFX() {
+    this.sfxEnabled = !this.sfxEnabled;
+    if (this.sfxEnabled) {
+      if (this.dom.btnToggleSFX) this.dom.btnToggleSFX.innerHTML = '🔊 SFX: An';
+      this.showToast('🔊 Soundeffekte eingeschaltet');
+    } else {
+      if (this.dom.btnToggleSFX) this.dom.btnToggleSFX.innerHTML = '🔇 SFX: Aus';
+      this.showToast('🔇 Soundeffekte stummgeschaltet');
+    }
+  }
+
   stopMusic() {
     if (this.bgMusic) {
       this.bgMusic.pause();
@@ -200,8 +228,26 @@ class SeiltanzerGame {
     this.state = GAME_STATE.START;
     this.isLoadingRequested = false;
     this.stopMusic();
-    if (this.dom.startModal) this.dom.startModal.classList.remove('hidden');
-    if (this.dom.gameoverModal) this.dom.gameoverModal.classList.add('hidden');
+    if (this.windSoundGain) {
+      this.windSoundGain.gain.value = 0;
+    }
+    // Hide gameplay UI HUD
+    if (this.dom.gameUi) {
+      this.dom.gameUi.classList.add('hidden');
+    }
+
+    if (this.dom.startModal) {
+      this.dom.startModal.classList.remove('hidden');
+      this.dom.startModal.style.display = 'flex';
+    }
+    if (this.dom.pauseModal) {
+      this.dom.pauseModal.classList.add('hidden');
+      this.dom.pauseModal.style.display = 'none';
+    }
+    if (this.dom.gameoverModal) {
+      this.dom.gameoverModal.classList.add('hidden');
+      this.dom.gameoverModal.style.display = 'none';
+    }
     this.distance = 0;
     this.score = 0;
     this.balance = 0;
@@ -209,6 +255,49 @@ class SeiltanzerGame {
     if (this.dom.valDistance) this.dom.valDistance.textContent = '0 m';
     if (this.dom.valScore) this.dom.valScore.textContent = '0';
     if (this.dom.balanceNeedle) this.dom.balanceNeedle.style.left = '50%';
+
+    // Reset character model position and pose for start screen showcase
+    this.characterGroup.position.set(0, 0, 0);
+    this.hipsGroup.position.set(0, 0, 0);
+    this.spineGroup.rotation.set(0, 0, 0);
+    this.airGroup.rotation.set(0, 0, 0);
+    this.armsGroup.rotation.set(0, 0, 0);
+    this.airGroup.position.y = 0;
+
+    if (this.femaleModel) {
+      this.femaleModel.rotation.set(0, Math.PI, 0);
+      if (this.femaleModelInitPos) {
+        this.femaleModel.position.copy(this.femaleModelInitPos);
+      }
+    }
+
+    // Reset bone orientations
+    [this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone, this.spine1Bone, this.spine2Bone,
+     this.leftArmBone, this.rightArmBone, this.leftForeArmBone, this.rightForeArmBone, this.leftFootBone, this.rightFootBone].forEach(b => {
+      if (b && b.userData.initQ) {
+        b.quaternion.copy(b.userData.initQ);
+      }
+    });
+
+    if (this.worldGroup) {
+      this.worldGroup.position.set(0, 0, 0);
+    }
+
+    // Front showcase view (centered on mobile, offset on desktop)
+    if (this.camera) {
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        // Shift the camera target downward so the gymnast sits perfectly in the top half of the screen on mobile
+        this.camera.position.set(0, 1.10, -2.1);
+        this.camera.lookAt(0, 0.82, 0);
+      } else {
+        // Offset camera to the right on desktop so the gymnast stands to the right of the menu
+        this.camera.position.set(0.8, 1.35, -2.0);
+        this.camera.lookAt(0.2, 1.15, 0);
+      }
+    }
+
+    this.onWindowResize();
   }
 
   /* -------------------------------------------------- */
@@ -231,8 +320,17 @@ class SeiltanzerGame {
       0.1,
       1000
     );
-    this.camera.position.set(0, 2.3, 3.8);
-    this.camera.lookAt(0, 1.25, -5);
+    // Start page view: camera in front, looking at model's face/body (centered on mobile, offset on desktop)
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+      // Shift the camera target downward so the gymnast sits perfectly in the top half of the screen on mobile
+      this.camera.position.set(0, 1.10, -2.1);
+      this.camera.lookAt(0, 0.82, 0);
+    } else {
+      // Offset camera to the right on desktop so the gymnast stands to the right of the menu
+      this.camera.position.set(0.8, 1.35, -2.0);
+      this.camera.lookAt(0.2, 1.15, 0);
+    }
 
     // 1. BELEUCHTUNG & SCHATTEN: High-Visibility Character Lighting
     this.renderer = new THREE.WebGLRenderer({
@@ -345,6 +443,7 @@ class SeiltanzerGame {
       this.ropeRings.push(ring);
     }
 
+
     // 2. Skyscrapers in Distance
     this.buildBuildings();
 
@@ -375,6 +474,7 @@ class SeiltanzerGame {
       building.receiveShadow = true;
       this.worldGroup.add(building);
       this.buildings.push(building);
+
 
       if (Math.random() > 0.4) {
         const antennaGeo = new THREE.CylinderGeometry(0.2, 0.2, 15);
@@ -452,19 +552,33 @@ class SeiltanzerGame {
     if (this._gltfLoadingStarted) return;
     this._gltfLoadingStarted = true;
 
-    // Timeout safety fallback: if network loading takes > 3.0s, construct procedural 3D Gymnast
+    const modelUrl = 'assets/Ch22_nonPBR.glb';
+    const expectedSize = 54145493;
+
+    // Check GLTFLoader availability
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      console.error('❌ THREE.GLTFLoader not available!');
+      this.showToast('⚠️ GLTFLoader fehlt – Fallback');
+      this.buildProceduralGymnast();
+      this._triggerStartSequence();
+      return;
+    }
+
+    // Safety fallback after 12 seconds
     const fallbackTimer = setTimeout(() => {
       if (!this.femaleModel) {
-        console.warn('⚠️ GLB loading timeout: creating procedural 3D gymnast fallback');
+        console.warn('⚠️ GLB timeout – Fallback-Figur wird verwendet');
+        this.showToast('⏱️ Timeout – Fallback-Figur');
         this.buildProceduralGymnast();
         this._triggerStartSequence();
       }
-    }, 3200);
+    }, 12000);
 
     const setup = (gltf) => {
       clearTimeout(fallbackTimer);
       try {
         const model = gltf.scene;
+        console.log('✅ GLB geladen, Nodes:', model.children.length);
         model.rotation.set(0, Math.PI, 0);
 
         model.traverse(child => {
@@ -487,30 +601,71 @@ class SeiltanzerGame {
         this.rightUpLegBone = null;
         this.leftLegBone = null;
         this.rightLegBone = null;
+        this.leftFootBone = null;
+        this.rightFootBone = null;
         this.spine1Bone = null;
         this.spine2Bone = null;
+        this.leftArmBone = null;
+        this.rightArmBone = null;
+        this.leftForeArmBone = null;
+        this.rightForeArmBone = null;
 
+        const foundBones = [];
         model.traverse(child => {
           const name = child.name.toLowerCase();
-          if (name.includes('leftupleg')) this.leftUpLegBone = child;
-          else if (name.includes('rightupleg')) this.rightUpLegBone = child;
-          else if (name.includes('leftleg') && !name.includes('up')) this.leftLegBone = child;
-          else if (name.includes('rightleg') && !name.includes('up')) this.rightLegBone = child;
-          else if (name.includes('spine1') || (name.includes('spine') && !this.spine1Bone)) this.spine1Bone = child;
-          else if (name.includes('spine2')) this.spine2Bone = child;
+          let matched = false;
+          if (name.includes('leftupleg')) { this.leftUpLegBone = child; matched = true; }
+          else if (name.includes('rightupleg')) { this.rightUpLegBone = child; matched = true; }
+          else if (name.includes('leftleg') && !name.includes('up')) { this.leftLegBone = child; matched = true; }
+          else if (name.includes('rightleg') && !name.includes('up')) { this.rightLegBone = child; matched = true; }
+          else if (name.includes('leftfoot')) { this.leftFootBone = child; matched = true; }
+          else if (name.includes('rightfoot')) { this.rightFootBone = child; matched = true; }
+          else if (name.includes('leftforearm')) { this.leftForeArmBone = child; matched = true; }
+          else if (name.includes('rightforearm')) { this.rightForeArmBone = child; matched = true; }
+          else if (name.includes('leftarm') && !name.includes('fore')) { this.leftArmBone = child; matched = true; }
+          else if (name.includes('rightarm') && !name.includes('fore')) { this.rightArmBone = child; matched = true; }
+          else if (name.includes('spine2')) { this.spine2Bone = child; matched = true; }
+          else if (name.includes('spine1') || (name.includes('spine') && !this.spine1Bone)) { this.spine1Bone = child; matched = true; }
+
+          if (matched) {
+            foundBones.push(`${child.name} -> key bone`);
+          }
 
           if (child.isBone || child.type === 'Bone') {
             child.userData.initQ = child.quaternion.clone();
           }
         });
 
-        [this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone, this.spine1Bone, this.spine2Bone]
-        .forEach(b => {
-          if (b && !b.userData.initQ) b.userData.initQ = b.quaternion.clone();
+        console.log("🦴 Gefundene Key-Knochen:", foundBones);
+        console.log("🦴 Status Knochen:", {
+          leftUpLeg: !!this.leftUpLegBone,
+          rightUpLeg: !!this.rightUpLegBone,
+          leftLeg: !!this.leftLegBone,
+          rightLeg: !!this.rightLegBone,
+          spine1: !!this.spine1Bone,
+          spine2: !!this.spine2Bone,
+          leftArm: !!this.leftArmBone,
+          rightArm: !!this.rightArmBone,
+          leftForeArm: !!this.leftForeArmBone,
+          rightForeArm: !!this.rightForeArmBone
         });
+
+        if (!this.leftUpLegBone || !this.rightUpLegBone || !this.leftLegBone || !this.rightLegBone) {
+          console.warn("⚠️ Einige Knochen wurden nicht gefunden! Alle Knochen im Modell:");
+          model.traverse(child => {
+            if (child.isBone || child.type === 'Bone') {
+              console.log("  - Bone:", child.name);
+            }
+          });
+        }
+
+        [this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone, this.spine1Bone, this.spine2Bone,
+         this.leftArmBone, this.rightArmBone, this.leftForeArmBone, this.rightForeArmBone]
+          .forEach(b => { if (b && !b.userData.initQ) b.userData.initQ = b.quaternion.clone(); });
 
         const box = new THREE.Box3().setFromObject(model);
         const h   = box.getSize(new THREE.Vector3()).y;
+        console.log('📐 Modellhöhe (vor Scale):', h.toFixed(3));
         model.scale.setScalar(1.75 / (h || 1));
         box.setFromObject(model);
         const c = box.getCenter(new THREE.Vector3());
@@ -520,68 +675,110 @@ class SeiltanzerGame {
         this.femaleModel = model;
         this.airGroup.add(model);
         this.isModelLoaded = true;
-        console.log('✅ Real 3D Female Character Model loaded & ready!');
+        console.log('✅ 3D-Figur fertig montiert!');
       } catch (e) {
-        console.error('Error during setup model:', e);
+        console.error('❌ Fehler beim Setup der Figur:', e);
+        this.showToast('❌ Figur-Fehler: ' + e.message);
         if (!this.femaleModel) this.buildProceduralGymnast();
       }
       this._triggerStartSequence();
     };
 
     const onProgress = (xhr) => {
-      const bytesLoaded = xhr.loaded || 0;
-      const expectedTotal = (xhr.total && xhr.total > 0) ? xhr.total : 9362204;
-      const percent = Math.min(99, Math.round((bytesLoaded / expectedTotal) * 100));
+      const loaded = xhr.loaded || 0;
+      const total  = (xhr.total && xhr.total > 0) ? xhr.total : expectedSize;
+      const percent = Math.min(99, Math.round((loaded / total) * 100));
       if (this.dom.loaderPercent) this.dom.loaderPercent.textContent = percent + '%';
       if (this.dom.loaderBarFill) this.dom.loaderBarFill.style.width = percent + '%';
     };
 
     const onError = (err) => {
       clearTimeout(fallbackTimer);
-      console.warn('GLB load error, creating procedural 3D gymnast fallback:', err);
+      console.error('❌ GLB Ladefehler:', err);
+      this.showToast('❌ Ladefehler – Fallback-Figur');
       if (!this.femaleModel) this.buildProceduralGymnast();
       this._triggerStartSequence();
     };
 
-    const modelUrl = 'assets/character.glb';
-    if (typeof THREE.GLTFLoader !== 'undefined') {
-      new THREE.GLTFLoader().load(modelUrl, setup, onProgress, onError);
-    } else {
-      this.buildProceduralGymnast();
-      this._triggerStartSequence();
-    }
+    console.log('⏳ Lade Figur:', modelUrl);
+    new THREE.GLTFLoader().load(modelUrl, setup, onProgress, onError);
   }
 
   buildProceduralGymnast() {
     if (this.femaleModel) return;
     const group = new THREE.Group();
 
-    const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.6 });
-    const topMat = new THREE.MeshStandardMaterial({ color: 0xff007f, roughness: 0.4 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1a1638, roughness: 0.5 });
+    const skinMat  = new THREE.MeshStandardMaterial({ color: 0xe8b88a, roughness: 0.55 });
+    const topMat   = new THREE.MeshStandardMaterial({ color: 0xff007f, emissive: 0x550022, roughness: 0.35, metalness: 0.1 });
+    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x1a1050, roughness: 0.5 });
+    const hairMat  = new THREE.MeshStandardMaterial({ color: 0x1a0a00, roughness: 0.8 });
+    const poleMat  = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.85, roughness: 0.15, emissive: 0x00f2fe, emissiveIntensity: 0.25 });
 
-    // Torso
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.14, 0.50, 16), topMat);
-    torso.position.y = 1.05;
-    torso.castShadow = true;
-    group.add(torso);
-
-    // Head
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), skinMat);
-    head.position.y = 1.45;
+    // --- Head & Hair ---
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 16), skinMat);
+    head.position.y = 1.50;
     head.castShadow = true;
     group.add(head);
 
-    // Legs
-    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.75, 12), pantsMat);
-    legL.position.set(-0.09, 0.42, 0);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.118, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
+    hair.position.copy(head.position);
+    hair.position.y += 0.01;
+    group.add(hair);
+
+    // --- Torso ---
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.52, 14), topMat);
+    torso.position.y = 1.06;
+    torso.castShadow = true;
+    group.add(torso);
+
+    // --- Hips ---
+    const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.20, 12), pantsMat);
+    hips.position.y = 0.78;
+    group.add(hips);
+
+    // --- Legs ---
+    const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.038, 0.72, 10), pantsMat);
+    legL.position.set(-0.085, 0.38, 0);
     legL.castShadow = true;
     group.add(legL);
-
-    const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.04, 0.75, 12), pantsMat);
-    legR.position.set(0.09, 0.42, 0);
+    const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.038, 0.72, 10), pantsMat);
+    legR.position.set(0.085, 0.38, 0);
     legR.castShadow = true;
     group.add(legR);
+
+    // --- Arms (outstretched for balance) ---
+    const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.028, 0.52, 8), topMat);
+    armL.rotation.z = Math.PI / 2.2;
+    armL.position.set(-0.36, 1.18, 0);
+    armL.castShadow = true;
+    group.add(armL);
+    const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.028, 0.52, 8), topMat);
+    armR.rotation.z = -Math.PI / 2.2;
+    armR.position.set(0.36, 1.18, 0);
+    armR.castShadow = true;
+    group.add(armR);
+
+    // --- Balancing Pole (2.8m wide, held horizontally) ---
+    const poleGeo = new THREE.CylinderGeometry(0.018, 0.018, 2.80, 8);
+    poleGeo.rotateZ(Math.PI / 2);
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(0, 1.15, 0);
+    pole.castShadow = true;
+    group.add(pole);
+
+    // Glowing tip spheres on each end of pole
+    const tipGeo = new THREE.SphereGeometry(0.035, 8, 8);
+    const tipMat = new THREE.MeshStandardMaterial({ color: 0x00f2fe, emissive: 0x00f2fe, emissiveIntensity: 1.5 });
+    const tipL = new THREE.Mesh(tipGeo, tipMat);
+    tipL.position.set(-1.40, 1.15, 0);
+    group.add(tipL);
+    const tipR = new THREE.Mesh(tipGeo, tipMat.clone());
+    tipR.position.set(1.40, 1.15, 0);
+    group.add(tipR);
+
+    // Store tip refs for idle animation
+    this.poleTipLeft  = tipL;
+    this.poleTipRight = tipR;
 
     this.femaleModelInitPos = new THREE.Vector3(0, 0, 0);
     this.femaleModel = group;
@@ -606,6 +803,8 @@ class SeiltanzerGame {
           this.startGame();
         }
       }, 250);
+    } else {
+      this.onWindowResize();
     }
   }
 
@@ -623,7 +822,19 @@ class SeiltanzerGame {
     }
   }
 
-    /** Gentle idle breathing & balance sway on start screen */
+  /** Safely store bone initial rotations once (idempotent) */
+  _initBoneRotations() {
+    const bones = [
+      this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone,
+      this.leftFootBone, this.rightFootBone, this.spine1Bone, this.spine2Bone,
+      this.leftArmBone, this.rightArmBone, this.leftForeArmBone, this.rightForeArmBone
+    ];
+    bones.forEach(b => {
+      if (b && !b.userData.initQ) b.userData.initQ = b.quaternion.clone();
+    });
+  }
+
+  /** Gentle idle breathing & balance sway on start screen */
   updateIdleAnimation(dt) {
     if (!this.femaleModel) return;
     this._initBoneRotations();
@@ -636,10 +847,42 @@ class SeiltanzerGame {
     this.spineGroup.rotation.x = breath;
     this.femaleModel.rotation.z = idleSway * 0.5;
 
-    if (this.poleTipLeft && this.poleTipRight) {
-      const bend = Math.sin(time * 3.5) * 0.03;
-      this.poleTipLeft.position.y = bend;
-      this.poleTipRight.position.y = -bend;
+    // Pose legs one in front of the other on the rope centerline (X = 0)
+    // We use a fixed phase (0.8) of the walk cycle to create a stable tightrope stance
+    const standPhase = 0.8;
+    const stepAngle = standPhase * 0.58;
+
+    const inAngleL = 0.11 + Math.max(0, standPhase) * 0.14;
+    const inAngleR = -0.11 - Math.max(0, -standPhase) * 0.14;
+
+    const qStep_L = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), stepAngle)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -inAngleL));
+    const qStep_R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -stepAngle)
+      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -inAngleR));
+
+    if (this.leftUpLegBone) {
+      if (!this.leftUpLegBone.userData.initQ) this.leftUpLegBone.userData.initQ = this.leftUpLegBone.quaternion.clone();
+      this.leftUpLegBone.quaternion.copy(qStep_L).multiply(this.leftUpLegBone.userData.initQ);
+    }
+    if (this.rightUpLegBone) {
+      if (!this.rightUpLegBone.userData.initQ) this.rightUpLegBone.userData.initQ = this.rightUpLegBone.quaternion.clone();
+      this.rightUpLegBone.quaternion.copy(qStep_R).multiply(this.rightUpLegBone.userData.initQ);
+    }
+
+    if (this.leftLegBone) {
+      if (!this.leftLegBone.userData.initQ) this.leftLegBone.userData.initQ = this.leftLegBone.quaternion.clone();
+      const qKneeL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, standPhase) * 0.92);
+      this.leftLegBone.quaternion.copy(qKneeL).multiply(this.leftLegBone.userData.initQ);
+    }
+    if (this.rightLegBone) {
+      if (!this.rightLegBone.userData.initQ) this.rightLegBone.userData.initQ = this.rightLegBone.quaternion.clone();
+      const qKneeR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, -standPhase) * 0.92);
+      this.rightLegBone.quaternion.copy(qKneeR).multiply(this.rightLegBone.userData.initQ);
+    }
+
+    // Adjust hip height to match the standing pose depth
+    if (this.hipsGroup) {
+      this.hipsGroup.position.y = -Math.abs(standPhase) * 0.05;
     }
   }
 
@@ -651,7 +894,7 @@ class SeiltanzerGame {
     // 1. Keyboard Controls
     window.addEventListener('keydown', (e) => {
       if (this.state !== GAME_STATE.PLAYING) {
-        if (e.code === 'Space' || e.code === 'Enter') {
+        if ((e.code === 'Space' || e.code === 'Enter') && this.state === GAME_STATE.GAMEOVER) {
           this.requestSensorsAndStart();
         }
         return;
@@ -741,10 +984,19 @@ class SeiltanzerGame {
 
     const bindBtnClick = (elem, fn) => {
       if (!elem) return;
-      elem.addEventListener('click', (e) => {
-        if (e) e.stopPropagation();
+      let lastTriggered = 0;
+      const handler = (e) => {
+        const now = Date.now();
+        if (now - lastTriggered < 200) return;
+        lastTriggered = now;
+        if (e) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
         fn();
-      });
+      };
+      elem.addEventListener('click', handler);
+      elem.addEventListener('pointerdown', handler);
     };
 
     bindBtnClick(this.dom.btnAction, () => this.handleActionClick());
@@ -753,6 +1005,31 @@ class SeiltanzerGame {
     bindBtnClick(this.dom.btnToggleMusic, () => this.toggleMusic());
     bindBtnClick(this.dom.btnToggleSFX, () => this.toggleSFX());
     bindBtnClick(this.dom.btnPauseHome, () => this.returnToHome());
+
+    // Start screen settings gear
+    bindBtnClick(this.dom.btnSettingsToggle, () => {
+      if (this.dom.startSettingsPanel) {
+        this.dom.startSettingsPanel.classList.toggle('hidden');
+      }
+    });
+    bindBtnClick(this.dom.btnStartToggleMusic, () => {
+      this.toggleMusic();
+      if (this.dom.btnStartToggleMusic) {
+        this.dom.btnStartToggleMusic.textContent = this.musicEnabled ? '🎵 Musik: An' : '🔇 Musik: Aus';
+      }
+      if (this.dom.btnToggleMusic) {
+        this.dom.btnToggleMusic.innerHTML = this.musicEnabled ? '🔊 Musik: An' : '🔇 Musik: Aus';
+      }
+    });
+    bindBtnClick(this.dom.btnStartToggleSFX, () => {
+      this.toggleSFX();
+      if (this.dom.btnStartToggleSFX) {
+        this.dom.btnStartToggleSFX.textContent = this.sfxEnabled ? '🔊 SFX: An' : '🔕 SFX: Aus';
+      }
+      if (this.dom.btnToggleSFX) {
+        this.dom.btnToggleSFX.innerHTML = this.sfxEnabled ? '🔊 SFX: An' : '🔕 SFX: Aus';
+      }
+    });
 
     this.bindGyro();
   }
@@ -771,11 +1048,12 @@ class SeiltanzerGame {
       if (this.dom.loaderPercent) this.dom.loaderPercent.textContent = '100%';
       if (this.dom.loaderBarFill) this.dom.loaderBarFill.style.width = '100%';
       setTimeout(() => {
+        if (!this.isLoadingRequested) return; // cancelled by returnToHome
         if (this.dom.loadingOverlay) {
           this.dom.loadingOverlay.classList.add('hidden');
           this.dom.loadingOverlay.style.display = 'none';
         }
-        if (this.state !== GAME_STATE.PLAYING) {
+        if (this.state === GAME_STATE.START || this.state === GAME_STATE.GAMEOVER) {
           this.playMusic();
           this.startGame();
         }
@@ -909,6 +1187,14 @@ class SeiltanzerGame {
   }
 
   playFallSound() {
+    if (this.fallSound && this.sfxEnabled) {
+      try {
+        this.fallSound.currentTime = 0;
+        this.fallSound.play().catch(err => console.warn('Fall sound play error:', err));
+      } catch(e) {}
+      return;
+    }
+    // Procedural fallback if file unavailable
     if (!this.audioCtx) return;
     const osc = this.audioCtx.createOscillator();
     const gain = this.audioCtx.createGain();
@@ -917,7 +1203,6 @@ class SeiltanzerGame {
     osc.frequency.exponentialRampToValueAtTime(60, this.audioCtx.currentTime + 1.2);
     gain.gain.setValueAtTime(0.2, this.audioCtx.currentTime);
     gain.gain.linearRampToValueAtTime(0.001, this.audioCtx.currentTime + 1.2);
-
     osc.connect(gain);
     gain.connect(this.audioCtx.destination);
     osc.start();
@@ -961,9 +1246,36 @@ class SeiltanzerGame {
     this.armsGroup.rotation.set(0, 0, 0);
     this.airGroup.position.y = 0;
 
-    // Reset Camera
+    if (this.femaleModel) {
+      this.femaleModel.rotation.set(0, Math.PI, 0);
+      if (this.femaleModelInitPos) {
+        this.femaleModel.position.copy(this.femaleModelInitPos);
+      }
+    }
+
+    // Reset bone orientations to their initial poses
+    [this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone, this.spine1Bone, this.spine2Bone,
+     this.leftArmBone, this.rightArmBone, this.leftForeArmBone, this.rightForeArmBone, this.leftFootBone, this.rightFootBone].forEach(b => {
+      if (b && b.userData.initQ) {
+        b.quaternion.copy(b.userData.initQ);
+      }
+    });
+
+    // Reset World Z position
+    if (this.worldGroup) {
+      this.worldGroup.position.set(0, 0, 0);
+    }
+
+    // Reset Camera position and orientation
     this.camera.position.set(0, 2.3, 3.8);
     this.camera.lookAt(0, 1.25, -5);
+
+    this.onWindowResize();
+
+    // Show gameplay UI HUD
+    if (this.dom.gameUi) {
+      this.dom.gameUi.classList.remove('hidden');
+    }
 
     // Hide Modals immediately
     if (this.dom.startModal) {
@@ -980,6 +1292,7 @@ class SeiltanzerGame {
     if (this.state !== GAME_STATE.PLAYING || this.isJumping) return;
     this.isJumping = true;
     this.trickProgress = 0;
+    this.jumpTime = 0;
     this.jumpVY = this.jumpPower;
     this.playAudioTone(300, 'sine', 0.12, 0.12);
   }
@@ -1105,7 +1418,10 @@ class SeiltanzerGame {
 
   gameOver(reason) {
     this.state = GAME_STATE.GAMEOVER;
-    this.playFallSound();
+
+    if (this.dom.gameUi) {
+      this.dom.gameUi.classList.add('hidden');
+    }
 
     if (this.score > this.highScore) {
       this.highScore = this.score;
@@ -1158,7 +1474,7 @@ class SeiltanzerGame {
         this.dom.gameoverModal.style.display = 'flex';
         this.dom.gameoverModal.classList.remove('hidden');
       }
-    }, 1000);
+    }, 150);
   }
 
   _setScoreStatus(msg, cls) {
@@ -1308,9 +1624,13 @@ class SeiltanzerGame {
     if (Math.abs(this.balance) > 1.0) {
       this.state = GAME_STATE.FALLING;
       this.stopMusic();
+      this.playFallSound();
+      if (this.windSoundGain) {
+        this.windSoundGain.gain.value = 0;
+      }
       this.fallVelocityY = 0;
       this.fallDirection = Math.sign(this.balance);
-      this.gameOver(this.balance > 0 ? "Nach rechts abgestürzt!" : "Nach links abgestürzt!");
+      this.fallReason = this.balance > 0 ? "Nach rechts abgestürzt!" : "Nach links abgestürzt!";
       return;
     }
 
@@ -1326,11 +1646,12 @@ class SeiltanzerGame {
       this.squatTimer += dt;
       const p = Math.sin(Math.min(1.0, this.squatTimer / 1.3) * Math.PI);
       
-      if (this.hipsGroup) this.hipsGroup.position.y = -p * 0.38;
-      if (this.spineGroup) this.spineGroup.rotation.x = p * 0.35;
+      if (this.hipsGroup) this.hipsGroup.position.y = -p * 0.50;
+      if (this.spineGroup) this.spineGroup.rotation.x = p * 0.28;
       
-      const qSquatThigh = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 1.05);
-      const qSquatKnee = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 1.30);
+      const qSquatThigh = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 1.15);
+      const qSquatKnee = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 1.45);
+      const qSquatAnkle = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -p * 0.70);
 
       if (this.leftUpLegBone) {
         if (!this.leftUpLegBone.userData.initQ) this.leftUpLegBone.userData.initQ = this.leftUpLegBone.quaternion.clone();
@@ -1348,36 +1669,85 @@ class SeiltanzerGame {
         if (!this.rightLegBone.userData.initQ) this.rightLegBone.userData.initQ = this.rightLegBone.quaternion.clone();
         this.rightLegBone.quaternion.copy(qSquatKnee).multiply(this.rightLegBone.userData.initQ);
       }
+      if (this.leftFootBone) {
+        if (!this.leftFootBone.userData.initQ) this.leftFootBone.userData.initQ = this.leftFootBone.quaternion.clone();
+        this.leftFootBone.quaternion.copy(qSquatAnkle).multiply(this.leftFootBone.userData.initQ);
+      }
+      if (this.rightFootBone) {
+        if (!this.rightFootBone.userData.initQ) this.rightFootBone.userData.initQ = this.rightFootBone.quaternion.clone();
+        this.rightFootBone.quaternion.copy(qSquatAnkle).multiply(this.rightFootBone.userData.initQ);
+      }
+      
+      if (this.leftArmBone) {
+        if (!this.leftArmBone.userData.initQ) this.leftArmBone.userData.initQ = this.leftArmBone.quaternion.clone();
+        const qSquatArmL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -p * 0.85)
+          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 0.35));
+        this.leftArmBone.quaternion.copy(qSquatArmL).multiply(this.leftArmBone.userData.initQ);
+      }
+      if (this.rightArmBone) {
+        if (!this.rightArmBone.userData.initQ) this.rightArmBone.userData.initQ = this.rightArmBone.quaternion.clone();
+        const qSquatArmR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), p * 0.85)
+          .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), p * 0.35));
+        this.rightArmBone.quaternion.copy(qSquatArmR).multiply(this.rightArmBone.userData.initQ);
+      }
 
       if (this.squatTimer >= 1.3) {
         this.isSquatting = false;
         this.squatTimer = 0;
         if (this.hipsGroup) this.hipsGroup.position.y = 0;
         if (this.spineGroup) this.spineGroup.rotation.x = 0;
+        [this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone, this.leftFootBone, this.rightFootBone, this.leftArmBone, this.rightArmBone].forEach(b => {
+          if (b && b.userData.initQ) b.quaternion.copy(b.userData.initQ);
+        });
         this.inAirTrick = null;
         this.showToast("Perfekte Hocke!");
       }
     } else if (this.isJumping) {
+      this.jumpTime = (this.jumpTime || 0) + dt;
       this.jumpY += this.jumpVY * dt;
       this.jumpVY += this.gravity * dt;
       this.airGroup.position.y = this.jumpY;
 
       if (this.inAirTrick) {
-        this.trickProgress = (this.trickProgress || 0) + dt * 2.2;
-        const p = Math.min(1.0, this.trickProgress);
+        const airTime = 2 * this.jumpPower / Math.abs(this.gravity);
+        const p = Math.min(1.0, this.jumpTime / airTime);
 
         if (this.inAirTrick.id === 'spin') {
           if (this.femaleModel) {
             this.femaleModel.rotation.y = Math.PI + p * Math.PI * 2;
           }
+          // Pull arms close to the chest for a tighter, more realistic spin
+          const spinTuck = Math.sin(p * Math.PI);
+          const qSpinArmL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spinTuck * 1.10);
+          const qSpinArmR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -spinTuck * 1.10);
+
+          if (this.leftArmBone) this.leftArmBone.quaternion.copy(qSpinArmL).multiply(this.leftArmBone.userData.initQ);
+          if (this.rightArmBone) this.rightArmBone.quaternion.copy(qSpinArmR).multiply(this.rightArmBone.userData.initQ);
         } else if (this.inAirTrick.id === 'flip') {
           if (this.femaleModel) {
-            this.femaleModel.rotation.x = p * Math.PI * 2;
+            // Perform a backflip (rotate backward around local X axis)
+            this.femaleModel.rotation.x = -p * Math.PI * 2;
           }
-          const flipPhase = Math.sin(p * Math.PI);
-          const qFlipKnee = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), flipPhase * 1.10);
-          if (this.leftLegBone) this.leftLegBone.quaternion.copy(qFlipKnee).multiply(this.leftLegBone.userData.initQ);
-          if (this.rightLegBone) this.rightLegBone.quaternion.copy(qFlipKnee).multiply(this.rightLegBone.userData.initQ);
+          // Tuck legs and bring arms down to grab knees during the flip phase
+          const tuck = Math.sin(p * Math.PI); // peak tuck at p = 0.5
+          const qThigh = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tuck * 1.30);
+          const qKnee = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tuck * 1.50);
+          const qAnkle = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -tuck * 0.70);
+
+          const qFlipArmL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), tuck * 0.90)
+            .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tuck * 0.60));
+          const qFlipArmR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -tuck * 0.90)
+            .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tuck * 0.60));
+
+          if (this.leftUpLegBone) this.leftUpLegBone.quaternion.copy(qThigh).multiply(this.leftUpLegBone.userData.initQ);
+          if (this.rightUpLegBone) this.rightUpLegBone.quaternion.copy(qThigh).multiply(this.rightUpLegBone.userData.initQ);
+          if (this.leftLegBone) this.leftLegBone.quaternion.copy(qKnee).multiply(this.leftLegBone.userData.initQ);
+          if (this.rightLegBone) this.rightLegBone.quaternion.copy(qKnee).multiply(this.rightLegBone.userData.initQ);
+          if (this.leftFootBone) this.leftFootBone.quaternion.copy(qAnkle).multiply(this.leftFootBone.userData.initQ);
+          if (this.rightFootBone) this.rightFootBone.quaternion.copy(qAnkle).multiply(this.rightFootBone.userData.initQ);
+
+          if (this.leftArmBone) this.leftArmBone.quaternion.copy(qFlipArmL).multiply(this.leftArmBone.userData.initQ);
+          if (this.rightArmBone) this.rightArmBone.quaternion.copy(qFlipArmR).multiply(this.rightArmBone.userData.initQ);
         }
       }
 
@@ -1385,6 +1755,7 @@ class SeiltanzerGame {
       if (this.jumpY <= 0) {
         this.jumpY = 0;
         this.isJumping = false;
+        this.jumpTime = 0;
         this.trickProgress = 0;
         this.airGroup.position.y = 0;
         this.airGroup.rotation.set(0, 0, 0);
@@ -1393,6 +1764,14 @@ class SeiltanzerGame {
           this.femaleModel.rotation.x = 0;
           this.femaleModel.rotation.y = Math.PI;
         }
+
+        // Reset leg and arm bones to stand flat on the wire
+        [
+          this.leftUpLegBone, this.rightUpLegBone, this.leftLegBone, this.rightLegBone,
+          this.leftFootBone, this.rightFootBone, this.leftArmBone, this.rightArmBone
+        ].forEach(b => {
+          if (b && b.userData.initQ) b.quaternion.copy(b.userData.initQ);
+        });
 
         if (Math.abs(this.balance) > 0.4) {
           this.balance += Math.sign(this.balance) * 0.35;
@@ -1405,6 +1784,7 @@ class SeiltanzerGame {
       }
     }
 
+    let stepSine = 0;
     // 7. SLOWER PRECISE TIGHTROPE GAIT (Runs ONLY when NOT squatting!)
     if (!this.isSquatting) {
       this.walkCycle += dt * 4.5; // Slower, measured step cadence
@@ -1412,8 +1792,13 @@ class SeiltanzerGame {
         this.playStepSound();
       }
 
-      const stepSine = Math.sin(this.walkCycle);
-      const stepAngle = stepSine * 0.42;
+      stepSine = Math.sin(this.walkCycle);
+      const stepAngle = stepSine * 0.58;
+
+      // Vertical hip bounce to match walking cycle weight shifts
+      if (this.hipsGroup && !this.isJumping) {
+        this.hipsGroup.position.y = -Math.abs(stepSine) * 0.05;
+      }
 
       // Precise inward thigh angle so left and right feet land directly on the tightrope wire centerline (X = 0)
       const inAngleL = 0.11 + Math.max(0, stepSine) * 0.14;
@@ -1435,12 +1820,12 @@ class SeiltanzerGame {
 
       if (this.leftLegBone) {
         if (!this.leftLegBone.userData.initQ) this.leftLegBone.userData.initQ = this.leftLegBone.quaternion.clone();
-        const qKneeL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, stepSine) * 0.48);
+        const qKneeL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, stepSine) * 0.92);
         this.leftLegBone.quaternion.copy(qKneeL).multiply(this.leftLegBone.userData.initQ);
       }
       if (this.rightLegBone) {
         if (!this.rightLegBone.userData.initQ) this.rightLegBone.userData.initQ = this.rightLegBone.quaternion.clone();
-        const qKneeR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, -stepSine) * 0.48);
+        const qKneeR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.max(0, -stepSine) * 0.92);
         this.rightLegBone.quaternion.copy(qKneeR).multiply(this.rightLegBone.userData.initQ);
       }
     }
@@ -1481,6 +1866,28 @@ class SeiltanzerGame {
     }
     if (this.armsGroup) {
       this.armsGroup.rotation.z = this.balance * 0.95 + phoneTilt * 0.60;
+    }
+
+    // Dynamic procedural arm balancing animations for the 3D model
+    if (this.leftArmBone) {
+      if (!this.leftArmBone.userData.initQ) this.leftArmBone.userData.initQ = this.leftArmBone.quaternion.clone();
+      const qArmL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.balance * 0.45 + phoneTilt * 0.30);
+      this.leftArmBone.quaternion.copy(qArmL).multiply(this.leftArmBone.userData.initQ);
+    }
+    if (this.rightArmBone) {
+      if (!this.rightArmBone.userData.initQ) this.rightArmBone.userData.initQ = this.rightArmBone.quaternion.clone();
+      const qArmR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), this.balance * 0.45 + phoneTilt * 0.30);
+      this.rightArmBone.quaternion.copy(qArmR).multiply(this.rightArmBone.userData.initQ);
+    }
+    if (this.leftForeArmBone) {
+      if (!this.leftForeArmBone.userData.initQ) this.leftForeArmBone.userData.initQ = this.leftForeArmBone.quaternion.clone();
+      const qForeL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.abs(this.balance) * 0.25);
+      this.leftForeArmBone.quaternion.copy(qForeL).multiply(this.leftForeArmBone.userData.initQ);
+    }
+    if (this.rightForeArmBone) {
+      if (!this.rightForeArmBone.userData.initQ) this.rightForeArmBone.userData.initQ = this.rightForeArmBone.quaternion.clone();
+      const qForeR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, -1, 0), Math.abs(this.balance) * 0.25);
+      this.rightForeArmBone.quaternion.copy(qForeR).multiply(this.rightForeArmBone.userData.initQ);
     }
 
     this.characterGroup.position.set(0, 0, 0);
@@ -1532,11 +1939,25 @@ class SeiltanzerGame {
   updateFalling(dt) {
     this.fallVelocityY += this.gravity * dt;
     this.characterGroup.position.y += this.fallVelocityY * dt;
-    this.spineGroup.rotation.z += this.fallDirection * 4 * dt;
-    this.spineGroup.rotation.x += 2 * dt;
 
-    this.camera.position.y += 0.5 * dt;
+    if (this.femaleModel) {
+      this.femaleModel.rotation.x += 4.5 * dt;
+      this.femaleModel.rotation.y += 3.2 * dt;
+      this.femaleModel.rotation.z += this.fallDirection * 6.0 * dt;
+    }
+
+    if (this.spineGroup) {
+      this.spineGroup.rotation.z += this.fallDirection * 3 * dt;
+    }
+
+    // Camera tracks the falling character
+    this.camera.position.y += (this.characterGroup.position.y + 2.5 - this.camera.position.y) * 4.0 * dt;
+    this.camera.position.z += (this.characterGroup.position.z + 3.5 - this.camera.position.z) * 4.0 * dt;
     this.camera.lookAt(this.characterGroup.position);
+
+    if (this.characterGroup.position.y < -30) {
+      this.gameOver(this.fallReason || "Abgestürzt!");
+    }
   }
 }
 

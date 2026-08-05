@@ -1,0 +1,12 @@
+{
+  "name": "seiltanzer-3d",
+  "version": "1.0.0",
+  "description": "3D High Wire Balancing Game",
+  "main": "https_server.py",
+  "scripts": {
+    "dev": "python3 https_server.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

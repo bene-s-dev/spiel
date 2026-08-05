@@ -1,5 +1,5 @@
 // Network-first Service Worker – always get fresh code, never block with stale cache
-const CACHE_NAME = 'seiltanzer-3d-v999777';
+const CACHE_NAME = 'seiltanzer-3d-v999778';
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -18,9 +18,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Cache successful responses
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        // Only cache successful 200 OK responses (206 partial content throws errors)
+        if (response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
         return response;
       })
       .catch(() => caches.match(event.request))

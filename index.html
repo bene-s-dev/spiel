@@ -32,63 +32,72 @@
 
   <!-- UI Overlay -->
   <div id="ui-container">
+    <div id="game-ui" class="hidden">
+      <!-- Pause Button (Oben rechts, klein) -->
+      <button id="btn-pause" title="Pause">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+      </button>
 
-    <!-- Pause Button (Oben rechts, klein) -->
-    <button id="btn-pause" title="Pause">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-    </button>
+      <!-- Top HUD (Große Balance-Anzeige mittig + kleine Strecke darunter) -->
+      <div class="hud-top">
+        <div class="hud-card balance-container">
+          <div class="hud-label">Balance</div>
+          <div class="balance-track" id="balance-track">
+            <div class="balance-center-zone"></div>
+            <div class="balance-indicator" id="balance-needle"></div>
+          </div>
+        </div>
 
-    <!-- Top HUD (Große Balance-Anzeige mittig + kleine Strecke darunter) -->
-    <div class="hud-top">
-      <div class="hud-card balance-container">
-        <div class="hud-label">Balance</div>
-        <div class="balance-track" id="balance-track">
-          <div class="balance-center-zone"></div>
-          <div class="balance-indicator" id="balance-needle"></div>
+        <div class="hud-sub-info">
+          <span class="hud-sub-item">📏 <strong id="val-distance">0 m</strong></span>
+          <span class="hud-sub-dot">•</span>
+          <span class="hud-sub-item">⭐ <strong id="val-score">0</strong> PTS</span>
         </div>
       </div>
 
-      <div class="hud-sub-info">
-        <span class="hud-sub-item">📏 <strong id="val-distance">0 m</strong></span>
-        <span class="hud-sub-dot">•</span>
-        <span class="hud-sub-item">⭐ <strong id="val-score">0</strong> PTS</span>
+      <!-- Wind Indicator Alert -->
+      <div id="wind-indicator">
+        <span class="wind-arrow" id="wind-arrow">➔</span>
+        <span id="wind-text">SEITENWIND</span>
+      </div>
+
+      <!-- Air Trick Combo Banner -->
+      <div id="combo-banner">
+        <div class="trick-name" id="trick-name">SUPER FLIP</div>
+        <div class="trick-points" id="trick-points">+500 PTS</div>
+      </div>
+
+      <!-- iOS Motion Sensor Permission Banner -->
+      <div id="sensor-banner" class="hidden">
+        <span>📱 Bewegungssensor für iOS aktivieren?</span>
+        <button class="btn-sensor" id="btn-enable-sensor">Aktivieren</button>
+      </div>
+
+      <!-- Single Multi-Click Action Button at Bottom -->
+      <div class="controls-bottom" style="justify-content: center;">
+        <div class="btn-action btn-single-action" id="btn-action">
+          <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
+          <span id="btn-action-label">Aktion</span>
+        </div>
       </div>
     </div>
-
-    <!-- Wind Indicator Alert -->
-    <div id="wind-indicator">
-      <span class="wind-arrow" id="wind-arrow">➔</span>
-      <span id="wind-text">SEITENWIND</span>
-    </div>
-
-    <!-- Air Trick Combo Banner -->
-    <div id="combo-banner">
-      <div class="trick-name" id="trick-name">SUPER FLIP</div>
-      <div class="trick-points" id="trick-points">+500 PTS</div>
-    </div>
-
-    <!-- iOS Motion Sensor Permission Banner -->
-    <div id="sensor-banner" class="hidden">
-      <span>📱 Bewegungssensor für iOS aktivieren?</span>
-      <button class="btn-sensor" id="btn-enable-sensor">Aktivieren</button>
-    </div>
-
-    <!-- Single Multi-Click Action Button at Bottom -->
-    <div class="controls-bottom" style="justify-content: center;">
-      <div class="btn-action btn-single-action" id="btn-action">
-        <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
-        <span id="btn-action-label">Aktion</span>
-      </div>
-    </div>
-
   </div>
 
   <!-- Start Screen Modal -->
   <div id="start-modal" class="modal-screen">
-    <h1 class="game-title">SEILTÄNZERIN 3D</h1>
+    <h1 class="game-title">ROPEDANCER</h1>
     <p class="game-subtitle">Laufe als Akrobatin hoch über der Schlucht auf dem Seil. Halte dein Handy gerade und kippe es zum Balancieren!</p>
-    
-<button class="btn-primary" id="btn-start">SPIEL STARTEN</button>
+    <div style="display:flex; gap:10px; align-items:center; margin-top: 12px; margin-bottom: 24px; width:100%;">
+      <button class="btn-primary" id="btn-start" style="flex:1;">SPIEL STARTEN</button>
+      <button id="btn-settings-toggle" title="Einstellungen" style="width:46px; height:46px; border-radius:50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:white; font-size:20px; transition: background 0.2s ease;">⚙️</button>
+    </div>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="start-settings-panel" class="hidden" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; flex-direction:column; gap:10px;">
+      <div style="font-size:12px; font-weight:700; letter-spacing:1px; color:rgba(255,255,255,0.5); text-transform:uppercase; margin-bottom:2px;">Einstellungen</div>
+      <button class="btn-secondary" id="btn-start-toggle-music" style="width:100%;">🎵 Musik: An</button>
+      <button class="btn-secondary" id="btn-start-toggle-sfx" style="width:100%;">🔊 SFX: An</button>
+    </div>
 
     <!-- Global Leaderboard -->
     <div class="leaderboard-panel" id="start-leaderboard">
@@ -106,7 +115,7 @@
   <div id="loading-overlay" class="modal-screen hidden">
     <div class="loader-content">
       <div class="loader-spinner"></div>
-      <h2 class="loader-title">SEILTÄNZERIN 3D</h2>
+      <h2 class="loader-title">ROPEDANCER</h2>
       <p class="loader-subtitle" id="loader-status">Lade 3D-Welt & Figur… <span id="loader-percent">0%</span></p>
       <div class="loader-bar-bg" style="margin-top: 12px;">
         <div id="loader-bar-fill"></div>
@@ -176,7 +185,7 @@
   <!-- Highscore Module -->
   <script src="js/highscore.js"></script>
   <!-- Game Engine Script -->
-  <script src="js/game.js?v=999777"></script>
+  <script src="js/game.js?v=999778"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>
