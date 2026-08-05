@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>GLB Load Test</title>
+  <style>
+    body { background: #070913; color: #0ff; font-family: monospace; padding: 20px; }
+    #log { white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+    canvas { display: block; width: 400px; height: 300px; border: 1px solid #0ff; margin: 20px 0; }
+    .ok { color: #34c759; } .err { color: #ff3b30; } .warn { color: #ffd700; }
+  </style>
+</head>
+<body>
+<h2>🔍 GLB Loader Diagnose</h2>
+<canvas id="c"></canvas>
+<div id="log"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const log = document.getElementById('log');
+function addLog(msg, cls='') {
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = `[${new Date().toISOString().slice(11,23)}] ${msg}`;
+  log.appendChild(line);
+  console.log(msg);
+}
+
+addLog('Three.js version: ' + THREE.REVISION);
+addLog('GLTFLoader available: ' + (typeof THREE.GLTFLoader !== 'undefined'), typeof THREE.GLTFLoader !== 'undefined' ? 'ok' : 'err');
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(400, 300);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1026);
+const camera = new THREE.PerspectiveCamera(60, 400/300, 0.1, 100);
+camera.position.set(0, 1.5, 4);
+camera.lookAt(0, 1, 0);
+scene.add(new THREE.AmbientLight(0xffffff, 1));
+scene.add(new THREE.DirectionalLight(0xffffff, 1));
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+if (typeof THREE.GLTFLoader !== 'undefined') {
+  addLog('Starting GLB load: ./assets/character.glb');
+  const loader = new THREE.GLTFLoader();
+  
+  loader.load(
+    './assets/character.glb',
+    (gltf) => {
+      addLog('✅ GLB loaded successfully!', 'ok');
+      addLog('Scene children: ' + gltf.scene.children.length, 'ok');
+      addLog('Animations: ' + gltf.animations.length, 'ok');
+      
+      gltf.scene.traverse(child => {
+        if (child.isMesh) addLog('  Mesh found: ' + child.name, 'ok');
+        if (child.isSkinnedMesh) addLog('  SkinnedMesh: ' + child.name, 'ok');
+      });
+
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const size = box.getSize(new THREE.Vector3());
+      addLog('Model size: ' + JSON.stringify({x: size.x.toFixed(2), y: size.y.toFixed(2), z: size.z.toFixed(2)}), 'ok');
+      
+      const scale = 1.75 / (size.y || 1);
+      gltf.scene.scale.setScalar(scale);
+      gltf.scene.position.y = 0;
+      scene.add(gltf.scene);
+    },
+    (xhr) => {
+      if (xhr.lengthComputable) {
+        addLog(`Loading: ${Math.round(xhr.loaded/xhr.total*100)}%`);
+      } else {
+        addLog(`Loaded bytes: ${xhr.loaded}`);
+      }
+    },
+    (err) => {
+      addLog('❌ Load ERROR: ' + err.message, 'err');
+      addLog('Error type: ' + err.type, 'err');
+      addLog('Full error: ' + JSON.stringify(err), 'err');
+      console.error('Full GLB error:', err);
+    }
+  );
+} else {
+  addLog('❌ THREE.GLTFLoader is undefined!', 'err');
+}
+</script>
+</body>
+</html>

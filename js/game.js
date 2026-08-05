@@ -98,8 +98,19 @@ class SeiltanzerGame {
       btnJump: document.getElementById('btn-jump'),
       btnTrick: document.getElementById('btn-trick'),
       btnLeft: document.getElementById('btn-left'),
-      btnRight: document.getElementById('btn-right')
+      btnRight: document.getElementById('btn-right'),
+      // Highscore UI
+      playerNameInput: document.getElementById('player-name-input'),
+      btnSubmitScore: document.getElementById('btn-submit-score'),
+      scoreStatus: document.getElementById('score-status'),
+      nameEntrySection: document.getElementById('name-entry-section'),
+      gameoverLeaderboard: document.getElementById('gameover-leaderboard'),
+      gameoverLbList: document.getElementById('gameover-lb-list'),
+      startLbList: document.getElementById('start-lb-list')
     };
+
+    // Load the global leaderboard on the start screen
+    this._loadStartLeaderboard();
   }
 
   /* -------------------------------------------------- */
@@ -324,95 +335,102 @@ class SeiltanzerGame {
   }
 
   loadGLTFCharacter() {
-    const setupModel = (modelObj) => {
-      this.femaleModel = modelObj;
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      console.error('❌ THREE.GLTFLoader not available!');
+      return;
+    }
 
-      this.femaleModel.rotation.set(0, Math.PI, 0);
-      this.femaleModel.scale.set(1, 1, 1);
-      this.femaleModel.position.set(0, 0, 0);
+    const setup = (gltf) => {
+      const model = gltf.scene;
+      model.rotation.set(0, Math.PI, 0);
 
-      this.leftUpLegBone = null;
-      this.leftLegBone = null;
-      this.rightUpLegBone = null;
-      this.rightLegBone = null;
-      this.spine1Bone = null;
-      this.spine2Bone = null;
-
-      this.femaleModel.traverse((child) => {
-        // Exact Mixamo bone names: mixamorig2:LeftUpLeg etc.
-        const n = child.name;
-        const bName = n.toLowerCase().replace(/mixamorig\d*:/g, '');
-
-        if (child.rotation) {
-          child.userData.initRotation = child.rotation.clone();
-        }
-
-        if (bName === 'leftupleg') {
-          this.leftUpLegBone = child;
-        } else if (bName === 'leftleg') {
-          this.leftLegBone = child;
-        } else if (bName === 'rightupleg') {
-          this.rightUpLegBone = child;
-        } else if (bName === 'rightleg') {
-          this.rightLegBone = child;
-        } else if (bName === 'spine1') {
-          this.spine1Bone = child;
-        } else if (bName === 'spine2') {
-          this.spine2Bone = child;
-        } else if (bName === 'spine' && !this.spine1Bone) {
-          this.spine1Bone = child;
-        }
-
-        if (child.isMesh) {
-          child.castShadow = true;
+      // ── 1. Fix all meshes (frustumCulled=true kills skinned meshes off-center!)
+      model.traverse(child => {
+        if (child.isMesh || child.isSkinnedMesh) {
+          child.castShadow    = true;
           child.receiveShadow = true;
-          if (child.material) {
-            child.material.side = THREE.DoubleSide;
-          }
+          child.frustumCulled = false;
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach(m => { if (m) m.side = THREE.DoubleSide; });
         }
       });
-      console.log('Bones found - LeftUpLeg:', !!this.leftUpLegBone, 'RightUpLeg:', !!this.rightUpLegBone, 'Spine1:', !!this.spine1Bone);
 
-      const box = new THREE.Box3().setFromObject(this.femaleModel);
-      const size = box.getSize(new THREE.Vector3());
-      const targetHeight = 1.75;
-      const scaleFactor = targetHeight / (size.y || 1.0);
-      this.femaleModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
+      // ── 2. Collect ALL bones from ALL SkinnedMesh skeletons into one map
+      //      (handles models where each mesh has its own skeleton object)
+      const boneMap = {};
+      model.traverse(child => {
+        if (child.isSkinnedMesh && child.skeleton) {
+          child.skeleton.bones.forEach(b => {
+            const key = b.name.toLowerCase().replace(/mixamorig\d*:/g, '');
+            boneMap[key] = b;
+          });
+        }
+      });
+      console.log('🦴 Bone keys found:', Object.keys(boneMap).join(', '));
 
-      box.setFromObject(this.femaleModel);
-      const center = box.getCenter(new THREE.Vector3());
-      this.femaleModel.position.x = -center.x;
-      this.femaleModel.position.y = -box.min.y;
-      this.femaleModel.position.z = -center.z;
+      this.leftUpLegBone  = boneMap['leftupleg']  || null;
+      this.leftLegBone    = boneMap['leftleg']     || null;
+      this.rightUpLegBone = boneMap['rightupleg']  || null;
+      this.rightLegBone   = boneMap['rightleg']    || null;
+      this.spine1Bone     = boneMap['spine1'] || boneMap['spine'] || null;
+      this.spine2Bone     = boneMap['spine2']      || null;
+      this.hipsBone       = boneMap['hips']        || null;
 
-      this.airGroup.add(this.femaleModel);
-      console.log("✅ Megan 3D Model loaded & centered on wire!");
-      this.showToast("✅ Megan 3D geladen!");
+      console.log('✅ Bones — L:', !!this.leftUpLegBone, 'R:', !!this.rightUpLegBone,
+        'Spine1:', !!this.spine1Bone, 'Spine2:', !!this.spine2Bone);
+
+      // ── 3. Save initRotation IMMEDIATELY (bind pose is set at load time)
+      this._initBoneRotations();
+
+      // ── 4. Scale to 1.75m & center on wire
+      const box = new THREE.Box3().setFromObject(model);
+      const h   = box.getSize(new THREE.Vector3()).y;
+      model.scale.setScalar(1.75 / (h || 1));
+      box.setFromObject(model);
+      const c = box.getCenter(new THREE.Vector3());
+      model.position.set(-c.x, -box.min.y, -c.z);
+
+      this.femaleModel = model;
+      this.airGroup.add(model);
+      console.log('✅ Megan added to scene, bones ready');
+      this.showToast('✅ Megan geladen!');
     };
 
-    const handleProgress = (xhr) => {
-      if (xhr.lengthComputable) {
-        const percent = Math.round((xhr.loaded / xhr.total) * 100);
-        this.showToast(`Lade Megan: ${percent}%`);
+    console.log('⏳ Loading character.glb…');
+    new THREE.GLTFLoader().load(
+      './assets/character.glb',
+      setup,
+      xhr => {
+        if (xhr.lengthComputable) {
+          const p = Math.round(xhr.loaded / xhr.total * 100);
+          if (p % 20 === 0 && p > 0) this.showToast('Lade: ' + p + '%');
+        }
+      },
+      err => {
+        console.error('❌ character.glb failed:', err);
+        this.showToast('❌ Modell-Fehler!');
       }
-    };
-
-    if (typeof THREE.GLTFLoader !== 'undefined') {
-      const loader = new THREE.GLTFLoader();
-      loader.load(
-        './assets/character.glb',
-        (gltf) => setupModel(gltf.scene),
-        handleProgress,
-        (err) => { console.error('GLB Load error:', err); this.showToast('⚠️ Modell-Fehler!'); }
-      );
-    } else {
-      console.error('THREE.GLTFLoader not found!');
-    }
+    );
   }
+
+  /** Save current bone rotation as baseline. Called at load and lazily in game loop. */
+  _initBoneRotations() {
+    [this.leftUpLegBone, this.leftLegBone,
+     this.rightUpLegBone, this.rightLegBone,
+     this.spine1Bone, this.spine2Bone, this.hipsBone]
+    .forEach(b => {
+      if (b && !b.userData.initRotation) {
+        b.userData.initRotation = b.rotation.clone();
+      }
+    });
+  }
+
+
 
   /* -------------------------------------------------- */
   /* INPUT & CONTROLS MANAGER                          */
   /* -------------------------------------------------- */
+
   initInputs() {
     // 1. Keyboard Controls
     window.addEventListener('keydown', (e) => {
@@ -773,12 +791,93 @@ class SeiltanzerGame {
     this.dom.statScore.textContent = this.score;
     this.dom.statHigh.textContent = this.highScore;
 
+    // Reset submit UI
+    if (this.dom.scoreStatus)  { this.dom.scoreStatus.textContent = ''; this.dom.scoreStatus.className = 'score-status'; }
+    if (this.dom.btnSubmitScore)  this.dom.btnSubmitScore.disabled = false;
+    if (this.dom.nameEntrySection) this.dom.nameEntrySection.style.display = '';
+    if (this.dom.gameoverLeaderboard) this.dom.gameoverLeaderboard.style.display = 'none';
+
+    // Wire submit button (replace to avoid duplicate listeners)
+    if (this.dom.btnSubmitScore) {
+      const btn = this.dom.btnSubmitScore;
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      this.dom.btnSubmitScore = newBtn;
+
+      newBtn.addEventListener('click', async () => {
+        const name = (this.dom.playerNameInput?.value || '').trim();
+        if (!name) {
+          this._setScoreStatus('Bitte gib deinen Namen ein!', 'error');
+          return;
+        }
+        newBtn.disabled = true;
+        this._setScoreStatus('Wird gespeichert…', 'loading');
+        const result = await window.HighscoreDB.submitScore(name, this.score, Math.floor(this.distance), this.tricksCount);
+        if (result) {
+          this._setScoreStatus('✅ Score gespeichert!', 'success');
+          if (this.dom.nameEntrySection) this.dom.nameEntrySection.style.display = 'none';
+          // Show leaderboard after submit
+          await this._loadGameoverLeaderboard(name, this.score);
+        } else {
+          this._setScoreStatus('⚠️ Fehler beim Speichern. Nochmal versuchen?', 'error');
+          newBtn.disabled = false;
+        }
+      });
+    }
+
     setTimeout(() => {
       if (this.dom.gameoverModal) {
         this.dom.gameoverModal.style.display = 'flex';
         this.dom.gameoverModal.classList.remove('hidden');
       }
     }, 1000);
+  }
+
+  _setScoreStatus(msg, cls) {
+    if (!this.dom.scoreStatus) return;
+    this.dom.scoreStatus.textContent = msg;
+    this.dom.scoreStatus.className = `score-status ${cls}`;
+  }
+
+  async _loadStartLeaderboard() {
+    try {
+      const scores = await window.HighscoreDB.fetchTopScores(10);
+      this._renderLeaderboard(this.dom.startLbList, scores, null, null);
+    } catch (e) {
+      if (this.dom.startLbList) this.dom.startLbList.innerHTML = '<div class="lb-empty">Bestenliste nicht verfügbar</div>';
+    }
+  }
+
+  async _loadGameoverLeaderboard(submittedName, submittedScore) {
+    if (this.dom.gameoverLeaderboard) this.dom.gameoverLeaderboard.style.display = '';
+    if (this.dom.gameoverLbList) this.dom.gameoverLbList.innerHTML = '<div class="lb-loading">Lade Bestenliste…</div>';
+    const scores = await window.HighscoreDB.fetchTopScores(10);
+    this._renderLeaderboard(this.dom.gameoverLbList, scores, submittedName, submittedScore);
+  }
+
+  _renderLeaderboard(container, scores, highlightName, highlightScore) {
+    if (!container) return;
+    if (!scores || scores.length === 0) {
+      container.innerHTML = '<div class="lb-empty">Noch keine Scores 🎮</div>';
+      return;
+    }
+    const medals = ['🥇', '🥈', '🥉'];
+    container.innerHTML = scores.map((entry, i) => {
+      const rank = i + 1;
+      const rankLabel = medals[i] || rank;
+      const isHighlight = highlightName && entry.name === highlightName && entry.score === highlightScore;
+      const rankClass = rank <= 3 ? `rank-${rank}` : '';
+      const hlClass = isHighlight ? 'highlight' : '';
+      return `<div class="lb-row ${rankClass} ${hlClass}">
+        <span class="lb-rank">${rankLabel}</span>
+        <span class="lb-name">${this._escapeHtml(entry.name)}</span>
+        <span class="lb-score-val">${entry.score.toLocaleString()}</span>
+      </div>`;
+    }).join('');
+  }
+
+  _escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   /* -------------------------------------------------- */
