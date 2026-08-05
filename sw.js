@@ -1,10 +1,10 @@
 // Always fetch fresh network assets for instant live updates
-const CACHE_NAME = 'seiltanzer-3d-v90000';
+const CACHE_NAME = 'seiltanzer-3d-v99999';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './style.css',
-  './js/game.js?v=90000',
+  './js/game.js?v=99999',
   './manifest.json'
 ];
 
