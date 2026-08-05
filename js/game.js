@@ -1,6 +1,6 @@
 /**
  * SEILTÄNZERIN 3D - High Wire Balancing Game Engine
- * Powered by Three.js (WebGL), GLTFLoader & Web Audio API
+ * Powered by Three.js (WebGL), FBXLoader & Web Audio API
  */
 
 // Game States
@@ -57,7 +57,7 @@ class SeiltanzerGame {
     // Setup Three.js Scene
     this.initThree();
     
-    // Build 3D World & Load Standalone 3D Female Character Model (GLB 1.75 MB)
+    // Build 3D World & Load Megan 3D Character Model
     this.buildWorld();
     this.buildCharacter();
     
@@ -317,15 +317,13 @@ class SeiltanzerGame {
     this.poleTipRight.position.set(2.7, 0, 0);
     this.balancePole.add(this.poleTipRight);
 
-    // Load Standalone 3D Character Model (character.glb ~1.75 MB)
+    // Load Megan 3D Model (character.fbx)
     this.loadGLTFCharacter();
 
     this.characterGroup.position.set(0, 0, 0);
   }
 
   loadGLTFCharacter() {
-    if (typeof THREE.GLTFLoader === 'undefined') return;
-
     const setupModel = (modelObj) => {
       this.femaleModel = modelObj;
 
@@ -388,18 +386,25 @@ class SeiltanzerGame {
       this.femaleModel.position.z = -center.z;
 
       this.airGroup.add(this.femaleModel);
-      console.log("3D Model loaded & centered on wire!");
+      console.log("Megan 3D Model loaded & centered on wire!");
     };
 
     const handleProgress = (xhr) => {
       if (xhr.lengthComputable) {
         const percent = Math.round((xhr.loaded / xhr.total) * 100);
-        this.showToast(`Lade 3D-Modell: ${percent}%`);
+        this.showToast(`Lade Megan 3D: ${percent}%`);
       }
     };
 
-    const gltfLoader = new THREE.GLTFLoader();
-    gltfLoader.load('./assets/character.glb', (gltf) => setupModel(gltf.scene), handleProgress);
+    if (typeof THREE.FBXLoader !== 'undefined') {
+      const fbxLoader = new THREE.FBXLoader();
+      fbxLoader.load(
+        './assets/character.fbx',
+        (fbx) => setupModel(fbx),
+        handleProgress,
+        (err) => console.error("FBX Load error:", err)
+      );
+    }
   }
 
   /* -------------------------------------------------- */
