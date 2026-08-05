@@ -387,6 +387,7 @@ class SeiltanzerGame {
 
       this.airGroup.add(this.femaleModel);
       console.log("Megan 3D Model loaded & centered on wire!");
+      this.showToast("Megan 3D geladen!");
     };
 
     const handleProgress = (xhr) => {
