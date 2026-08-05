@@ -1,0 +1,3 @@
+.DS_Store
+*.fbx.gz
+compress_fbx.py

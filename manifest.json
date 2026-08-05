@@ -1,0 +1,18 @@
+{
+  "name": "Seiltänzer 3D - High Wire Balancing Game",
+  "short_name": "Seiltänzer",
+  "description": "3D Third-Person Tightrope Walking Browser Game with Gyroscope & Accelerometer controls",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070913",
+  "theme_color": "#070913",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23070913'/><path d='M10 80 L90 20' stroke='%2300f2fe' stroke-width='6'/><circle cx='50' cy='50' r='12' fill='%23ffd700'/></svg>",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

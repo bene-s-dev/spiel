@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#070913">
+  <title>Seiltänzerin 3D - High Wire Balancing Game</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Three.js 3D Engine & GLTF / FBX Loaders -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+</head>
+<body>
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container">
+    <canvas id="game-canvas"></canvas>
+  </div>
+
+  <!-- UI Overlay -->
+  <div id="ui-container">
+
+    <!-- Top HUD -->
+    <div class="hud-top">
+      <div class="hud-card">
+        <div class="hud-label">Distanz</div>
+        <div class="hud-value" id="val-distance">0 m</div>
+      </div>
+
+      <div class="hud-card balance-container">
+        <div class="hud-label" style="margin-bottom: 4px;">Balance</div>
+        <div class="balance-track">
+          <div class="balance-center-zone"></div>
+          <div class="balance-indicator" id="balance-needle"></div>
+        </div>
+      </div>
+
+      <div class="hud-card">
+        <div class="hud-label">Punkte</div>
+        <div class="hud-value" id="val-score">0</div>
+      </div>
+    </div>
+
+    <!-- Gyro Calibration Button -->
+    <button id="btn-calibrate">⚖️ Gyro Nullen</button>
+
+    <!-- Wind Indicator Alert -->
+    <div id="wind-indicator">
+      <span class="wind-arrow" id="wind-arrow">➔</span>
+      <span id="wind-text">SEITENWIND BÖE!</span>
+    </div>
+
+    <!-- Air Trick Combo Banner -->
+    <div id="combo-banner">
+      <div class="trick-name" id="trick-name">SUPER FLIP</div>
+      <div class="trick-points" id="trick-points">+500 PTS</div>
+    </div>
+
+    <!-- iOS Motion Sensor Permission Banner -->
+    <div id="sensor-banner" class="hidden">
+      <span>📱 Bewegungssensor für iOS aktivieren?</span>
+      <button class="btn-sensor" id="btn-enable-sensor">Aktivieren</button>
+    </div>
+
+    <!-- Bottom Touch Action Controls -->
+    <div class="controls-bottom">
+      <div class="tilt-touch-zone">
+        <div class="btn-action btn-tilt" id="btn-left">
+          <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+          <span>Links</span>
+        </div>
+        <div class="btn-action btn-tilt" id="btn-right">
+          <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          <span>Rechts</span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 12px;">
+        <div class="btn-action" id="btn-trick" style="border-color: rgba(255, 215, 0, 0.4);">
+          <svg viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+          <span>Trick</span>
+        </div>
+
+        <div class="btn-action" id="btn-jump" style="border-color: rgba(0, 242, 254, 0.5);">
+          <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
+          <span>Sprung</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Start Screen Modal -->
+  <div id="start-modal" class="modal-screen">
+    <h1 class="game-title">SEILTÄNZERIN 3D</h1>
+    <p class="game-subtitle">Laufe als Akrobatin hoch über der Schlucht auf dem Seil. Halte dein Handy gerade und kippe es zum Balancieren!</p>
+    
+    <button class="btn-primary" id="btn-start">SPIEL STARTEN</button>
+
+    <div class="control-tips">
+      <div class="tip-row">
+        <span>Balance (Gerät kippen)</span>
+        <span class="key-badge">Gyro / ⬅️ ➡️</span>
+      </div>
+      <div class="tip-row">
+        <span>Springen über Hindernisse</span>
+        <span class="key-badge">Button / SPACE</span>
+      </div>
+      <div class="tip-row">
+        <span>Akrobatik im Sprung</span>
+        <span class="key-badge">Button / ⬆️ ⬇️</span>
+      </div>
+    </div>
+
+    <div class="model-credit">
+      3D Modell: <a href="https://skfb.ly/pJwAz" target="_blank" rel="noopener">"Seated Stretch in White Studio"</a> by restore50 (unter <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>)
+    </div>
+  </div>
+
+  <!-- Game Over Modal -->
+  <div id="gameover-modal" class="modal-screen hidden">
+    <h1 class="game-title" style="background: linear-gradient(135deg, #ff3b30, #ff0055); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">ABGESTÜRZT!</h1>
+    <p class="game-subtitle" id="fall-reason">Du hast das Gleichgewicht verloren.</p>
+
+    <div class="stats-box">
+      <div class="stat-item">
+        <span class="stat-title">Zurückgelegte Strecke</span>
+        <span class="stat-val" id="stat-dist">0 m</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-title">Absolvierte Tricks</span>
+        <span class="stat-val" id="stat-tricks">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-title">Gesamtpunkte</span>
+        <span class="stat-val" id="stat-score">0</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-title">Highscore</span>
+        <span class="stat-val" id="stat-high" style="color: var(--gold-color);">0</span>
+      </div>
+    </div>
+
+    <button class="btn-primary" id="btn-restart">NOCHMAL SPIELEN</button>
+  </div>
+
+  <!-- Game Engine Script -->
+  <script src="js/game.js?v=90000"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered!', reg.scope))
+          .catch(err => console.error('SW failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
