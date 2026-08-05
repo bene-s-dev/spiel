@@ -340,18 +340,18 @@ class SeiltanzerGame {
 
       this.femaleModel.traverse((child) => {
         const bName = child.name.toLowerCase();
-        
+
         if (child.rotation) {
           child.userData.initRotation = child.rotation.clone();
         }
 
-        if (bName.includes('leftupleg') || bName.includes('thigh_l') || bName.includes('leftleg1') || (bName.includes('left') && bName.includes('upleg'))) {
+        if (bName.includes('leftupleg') || bName.includes('thigh_l') || (bName.includes('left') && bName.includes('upleg'))) {
           this.leftUpLegBone = child;
-        } else if (bName.includes('leftleg') || bName.includes('shin_l') || bName.includes('leftleg2') || (bName.includes('left') && bName.includes('leg') && !bName.includes('up'))) {
+        } else if ((bName.includes('leftleg') || bName.includes('shin_l')) && !bName.includes('up')) {
           this.leftLegBone = child;
-        } else if (bName.includes('rightupleg') || bName.includes('thigh_r') || bName.includes('rightleg1') || (bName.includes('right') && bName.includes('upleg'))) {
+        } else if (bName.includes('rightupleg') || bName.includes('thigh_r') || (bName.includes('right') && bName.includes('upleg'))) {
           this.rightUpLegBone = child;
-        } else if (bName.includes('rightleg') || bName.includes('shin_r') || bName.includes('rightleg2') || (bName.includes('right') && bName.includes('leg') && !bName.includes('up'))) {
+        } else if ((bName.includes('rightleg') || bName.includes('shin_r')) && !bName.includes('up')) {
           this.rightLegBone = child;
         } else if (bName.includes('spine1')) {
           this.spine1Bone = child;
@@ -366,45 +366,44 @@ class SeiltanzerGame {
           child.receiveShadow = true;
           if (child.material) {
             child.material.side = THREE.DoubleSide;
-            child.material.roughness = 0.55;
           }
         }
       });
 
       const box = new THREE.Box3().setFromObject(this.femaleModel);
       const size = box.getSize(new THREE.Vector3());
-
       const targetHeight = 1.75;
       const scaleFactor = targetHeight / (size.y || 1.0);
       this.femaleModel.scale.set(scaleFactor, scaleFactor, scaleFactor);
 
       box.setFromObject(this.femaleModel);
       const center = box.getCenter(new THREE.Vector3());
-
       this.femaleModel.position.x = -center.x;
       this.femaleModel.position.y = -box.min.y;
       this.femaleModel.position.z = -center.z;
 
       this.airGroup.add(this.femaleModel);
-      console.log("Megan 3D Model loaded & centered on wire!");
-      this.showToast("Megan 3D geladen!");
+      console.log("✅ Megan 3D Model loaded & centered on wire!");
+      this.showToast("✅ Megan 3D geladen!");
     };
 
     const handleProgress = (xhr) => {
       if (xhr.lengthComputable) {
         const percent = Math.round((xhr.loaded / xhr.total) * 100);
-        this.showToast(`Lade Megan 3D: ${percent}%`);
+        this.showToast(`Lade Megan: ${percent}%`);
       }
     };
 
-    if (typeof THREE.FBXLoader !== 'undefined') {
-      const fbxLoader = new THREE.FBXLoader();
-      fbxLoader.load(
-        './assets/character.fbx',
-        (fbx) => setupModel(fbx),
+    if (typeof THREE.GLTFLoader !== 'undefined') {
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        './assets/character.glb',
+        (gltf) => setupModel(gltf.scene),
         handleProgress,
-        (err) => console.error("FBX Load error:", err)
+        (err) => console.error("GLB Load error:", err)
       );
+    } else {
+      console.error("THREE.GLTFLoader not found!");
     }
   }
 
