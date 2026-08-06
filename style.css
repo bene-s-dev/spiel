@@ -44,6 +44,7 @@ html, body {
   width: 100%;
   height: 100%;
   z-index: 1;
+  display: none; /* Hide by default on start screen */
 }
 
 #game-canvas {
@@ -77,16 +78,51 @@ html, body {
   pointer-events: auto;
 }
 
-/* Top HUD Bar */
 .hud-top {
   display: flex;
-  justify-content: space-between;
-  align-items: stretch;
-  width: calc(100% - 65px);
-  max-width: 540px;
-  margin: 0 auto 0 0;
-  gap: 10px;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 320px;
+  margin: 0 auto;
+  gap: 6px;
 }
+
+@media (max-width: 480px) {
+  .hud-top {
+    max-width: 230px;
+  }
+}
+
+.hud-sub-info {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+  background: rgba(10, 14, 26, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 6px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.hud-sub-item {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+}
+
+.hud-sub-dot {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 14px;
+}
+
 
 .hud-card {
   background: var(--glass-bg);
@@ -311,7 +347,8 @@ html, body {
   top: 0;
   left: 0;
   width: 100vw;
-  height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
   background: var(--bg-dark);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -320,7 +357,7 @@ html, body {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  padding: 30px;
+  padding: 30px 20px calc(30px + env(safe-area-inset-bottom));
   text-align: center;
   pointer-events: auto;
   transition: opacity 0.3s ease;
@@ -335,6 +372,15 @@ html, body {
   visibility: hidden;
   pointer-events: none !important;
   display: none !important;
+}
+
+/* Start screen has its own image background - transparent base to show the img element */
+#start-modal {
+  background: transparent !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow: hidden;
+  height: 100vh !important;
 }
 
 .game-title {
@@ -711,8 +757,8 @@ html, body {
 /* Home Button Top Right */
 #btn-pause {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 26px;
+  right: 12px;
   width: 36px;
   height: 36px;
   border-radius: 50%;

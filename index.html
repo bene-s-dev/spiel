@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#070913">
   <title>Seiltänzerin 3D - High Wire Balancing Game</title>
-  
+
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
-  
+
   <!-- Three.js 3D Engine & GLTF Loader -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -23,10 +25,11 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
 </head>
+
 <body>
 
-  <!-- 3D Canvas Container -->
-  <div id="canvas-container">
+  <!-- 3D Canvas Container – hidden initially, shown when game starts -->
+  <div id="canvas-container" style="display:none;">
     <canvas id="game-canvas"></canvas>
   </div>
 
@@ -35,7 +38,9 @@
     <div id="game-ui" class="hidden">
       <!-- Pause Button (Oben rechts, klein) -->
       <button id="btn-pause" title="Pause">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+        </svg>
       </button>
 
       <!-- Top HUD (Große Balance-Anzeige mittig + kleine Strecke darunter) -->
@@ -49,9 +54,9 @@
         </div>
 
         <div class="hud-sub-info">
-          <span class="hud-sub-item">📏 <strong id="val-distance">0 m</strong></span>
+          <span class="hud-sub-item"><strong id="val-distance">0 m</strong></span>
           <span class="hud-sub-dot">•</span>
-          <span class="hud-sub-item">⭐ <strong id="val-score">0</strong> PTS</span>
+          <span class="hud-sub-item"><strong id="val-score">0</strong> PTS</span>
         </div>
       </div>
 
@@ -76,7 +81,9 @@
       <!-- Single Multi-Click Action Button at Bottom -->
       <div class="controls-bottom" style="justify-content: center;">
         <div class="btn-action btn-single-action" id="btn-action">
-          <svg viewBox="0 0 24 24"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M12 4l-8 8h5v8h6v-8h5z" />
+          </svg>
           <span id="btn-action-label">Aktion</span>
         </div>
       </div>
@@ -84,30 +91,94 @@
   </div>
 
   <!-- Start Screen Modal -->
-  <div id="start-modal" class="modal-screen">
-    <h1 class="game-title">ROPEDANCER</h1>
-    <p class="game-subtitle">Laufe als Akrobatin hoch über der Schlucht auf dem Seil. Halte dein Handy gerade und kippe es zum Balancieren!</p>
-    <div style="display:flex; gap:10px; align-items:center; margin-top: 12px; margin-bottom: 24px; width:100%;">
-      <button class="btn-primary" id="btn-start" style="flex:1;">SPIEL STARTEN</button>
-      <button id="btn-settings-toggle" title="Einstellungen" style="width:46px; height:46px; border-radius:50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:white; font-size:20px; transition: background 0.2s ease;">⚙️</button>
+  <div id="start-modal" class="modal-screen"
+    style="padding: 30px 16px calc(50px + env(safe-area-inset-bottom)); box-sizing: border-box; overflow: hidden; position: fixed; inset: 0; display: flex; flex-direction: column; justify-content: space-between; align-items: center; background: transparent;">
+
+    <!-- Full-screen character preview image in background -->
+    <img id="start-char-img" src="assets/start_preview.png" alt="Seiltänzerin"
+      style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center top; z-index: 1;" />
+
+    <!-- Subtle uniform dark overlay covering the background image for text legibility -->
+    <div style="position: absolute; inset: 0; background: rgba(10, 14, 26, 0.40); z-index: 1; pointer-events: none;">
     </div>
 
-    <!-- Settings Panel (hidden by default) -->
-    <div id="start-settings-panel" class="hidden" style="width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:14px 16px; margin-bottom:16px; display:flex; flex-direction:column; gap:10px;">
-      <div style="font-size:12px; font-weight:700; letter-spacing:1px; color:rgba(255,255,255,0.5); text-transform:uppercase; margin-bottom:2px;">Einstellungen</div>
-      <button class="btn-secondary" id="btn-start-toggle-music" style="width:100%;">🎵 Musik: An</button>
-      <button class="btn-secondary" id="btn-start-toggle-sfx" style="width:100%;">🔊 SFX: An</button>
+    <!-- Title at the very top -->
+    <div style="width: 100%; text-align: center; z-index: 2; position: relative;">
+      <h1 class="game-title" style="margin: 0; font-size: clamp(2.3rem, 10vw, 3.8rem);">ROPEDANCER</h1>
     </div>
 
-    <!-- Global Leaderboard -->
-    <div class="leaderboard-panel" id="start-leaderboard">
-      <div class="lb-header">
-        <span class="lb-trophy">🏆</span>
-        <span>WELTRANGLISTE</span>
+    <!-- Bottom panel: subtitle + buttons + leaderboard floating directly over background image -->
+    <div
+      style="width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; z-index: 2; position: relative; margin-bottom: 20px;">
+      <p class="game-subtitle"
+        style="margin: 0 0 6px; font-size: 13px; opacity: 0.9; text-align: center; text-shadow: 0 2px 8px rgba(0,0,0,0.9);">
+        Halte dein Handy gerade und kippe es zum Balancieren!</p>
+      <div style="width: 100%; max-width: 400px; z-index: 2;">
+        <button class="btn-primary" id="btn-start" style="width: 100%;">SPIEL STARTEN</button>
       </div>
-      <div class="lb-list" id="start-lb-list">
-        <div class="lb-loading">Lade Bestenliste…</div>
+    </div>
+  </div>
+
+  <!-- Name Input & Tutorial Modal Screen -->
+  <div id="name-modal" class="modal-screen hidden"
+    style="padding: 24px 20px calc(50px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; justify-content: space-between; align-items: center; background: #070913; z-index: 100; box-sizing: border-box; overflow: hidden; position: fixed; inset: 0;">
+    <!-- Header -->
+    <div style="width: 100%; text-align: center; max-width: 600px;">
+      <h2
+        style="margin: 0 0 4px; font-size: clamp(1.8rem, 5vw, 2.5rem); color: var(--gold-color); letter-spacing: 1.5px; text-transform: uppercase;">
+        SPIELSTART</h2>
+      <p style="margin: 0; font-size: 13px; opacity: 0.85;">Trage deinen Namen ein und lies die Steuerung durch.</p>
+    </div>
+
+    <!-- Input & Guide Container -->
+    <div
+      style="width: 100%; max-width: 650px; display: flex; flex-direction: column; gap: 16px; align-items: center; flex: 1; justify-content: center;">
+      <!-- Name Input -->
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 6px; align-items: center;">
+        <input type="text" id="username-input" placeholder="Name oder ..." maxlength="15"
+          style="width: 100%; max-width: 320px; padding: 12px 16px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); color: white; font-size: 17px; text-align: center; outline: none; transition: border 0.2s;" />
       </div>
+
+      <!-- Instruction Cards (Two Columns / Responsive) -->
+      <div class="guide-grid"
+        style="width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px;">
+        <!-- Controls Card -->
+        <div
+          style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div
+            style="font-weight: 700; color: #00f2fe; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span>📱</span> STEUERUNG & BALANCE
+          </div>
+          <div
+            style="font-size: 12.5px; opacity: 0.9; line-height: 1.4; display: flex; flex-direction: column; gap: 8px;">
+            <div><strong>Mobile Sensoren:</strong> Kippe dein Smartphone nach links/rechts, um das Gleichgewicht
+              auszusteuern.</div>
+            <div><strong>PC / Desktop:</strong> Bewege deinen Mauszeiger nach links/rechts über den Bildschirm.</div>
+          </div>
+        </div>
+
+        <!-- Tricks Card -->
+        <div
+          style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div
+            style="font-weight: 700; color: #ff007f; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+            <span>✨</span> AKTIONEN & TRICKS
+          </div>
+          <div
+            style="font-size: 12.5px; opacity: 0.9; line-height: 1.4; display: flex; flex-direction: column; gap: 8px;">
+            <div><strong>Tippe den Aktions-Button am Boden:</strong></div>
+            <div>🔘 <strong>1x Klicken:</strong> Normaler Sprung ⬆️</div>
+            <div>🔘 <strong>2x Klicken:</strong> Sprung & Drehung (Spin) 🔄</div>
+            <div>🔘 <strong>3x Klicken:</strong> Salto (Flip) 🤸‍♀️</div>
+            <div>🔘 <strong>4x Klicken:</strong> In die Hocke gehen 🧘</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Button -->
+    <div style="width: 100%; max-width: 400px;">
+      <button class="btn-primary" id="btn-submit-name" style="width: 100%; padding: 14px;">SPIEL STARTEN</button>
     </div>
   </div>
 
@@ -128,7 +199,8 @@
     <h1 class="game-title">PAUSE</h1>
     <p class="game-subtitle">Das Spiel ist pausiert</p>
 
-    <div class="pause-actions" style="display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:16px;">
+    <div class="pause-actions"
+      style="display:flex; flex-direction:column; gap:10px; width:100%; max-width:280px; margin-top:16px;">
       <button class="btn-primary" id="btn-resume">▶ WEITER</button>
       <button class="btn-secondary" id="btn-toggle-music">🎵 Musik: An</button>
       <button class="btn-secondary" id="btn-toggle-sfx">🔊 SFX: An</button>
@@ -138,7 +210,9 @@
 
   <!-- Game Over Modal -->
   <div id="gameover-modal" class="modal-screen hidden">
-    <h1 class="game-title" style="background: linear-gradient(135deg, #ff3b30, #ff0055); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">ABGESTÜRZT!</h1>
+    <h1 class="game-title"
+      style="background: linear-gradient(135deg, #ff3b30, #ff0055); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+      ABGESTÜRZT!</h1>
     <p class="game-subtitle" id="fall-reason">Du hast das Gleichgewicht verloren.</p>
 
     <div class="stats-box">
@@ -160,18 +234,10 @@
       </div>
     </div>
 
-    <!-- Name Entry & Submit -->
-    <div class="name-entry" id="name-entry-section">
-      <p class="name-entry-label">📝 Score eintragen?</p>
-      <div class="name-entry-row">
-        <input type="text" id="player-name-input" class="name-input" placeholder="Dein Name…" maxlength="30" autocomplete="off" spellcheck="false">
-        <button class="btn-submit-score" id="btn-submit-score">💾 Speichern</button>
-      </div>
-      <div class="score-status" id="score-status"></div>
-    </div>
+    <div class="score-status" id="score-status" style="margin-top: 8px; font-weight: 500;"></div>
 
     <!-- Mini Leaderboard on Game Over -->
-    <div class="leaderboard-panel" id="gameover-leaderboard" style="display:none;">
+    <div class="leaderboard-panel" id="gameover-leaderboard">
       <div class="lb-header">
         <span class="lb-trophy">🏆</span>
         <span>TOP 10 BESTENLISTE</span>
@@ -179,7 +245,7 @@
       <div class="lb-list" id="gameover-lb-list"></div>
     </div>
 
-    <button class="btn-primary" id="btn-restart" style="margin-top:14px;">NOCHMAL SPIELEN</button>
+    <button class="btn-primary" id="btn-restart" style="margin-top:14px; margin-bottom: 20px;">NOCHMAL SPIELEN</button>
   </div>
 
   <!-- Highscore Module -->
@@ -198,4 +264,5 @@
     }
   </script>
 </body>
+
 </html>
