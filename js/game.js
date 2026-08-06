@@ -141,6 +141,7 @@ class SeiltanzerGame {
       btnResume: document.getElementById('btn-resume'),
       btnToggleMusic: document.getElementById('btn-toggle-music'),
       btnToggleSFX: document.getElementById('btn-toggle-sfx'),
+      btnCalibrateGyro: document.getElementById('btn-calibrate-gyro'),
       btnPauseHome: document.getElementById('btn-pause-home'),
       btnAction: document.getElementById('btn-action'),
       btnActionLabel: document.getElementById('btn-action-label'),
@@ -1780,6 +1781,7 @@ class SeiltanzerGame {
 
     bindBtnClick(this.dom.btnPause, () => this.pauseGame());
     bindBtnClick(this.dom.btnResume, () => this.resumeGame());
+    bindBtnClick(this.dom.btnCalibrateGyro, () => this.calibrateGyro());
     bindBtnClick(this.dom.btnToggleMusic, () => this.toggleMusic());
     bindBtnClick(this.dom.btnToggleSFX, () => this.toggleSFX());
     bindBtnClick(this.dom.btnPauseHome, () => this.returnToHome());
@@ -1897,6 +1899,15 @@ class SeiltanzerGame {
 
     window.addEventListener('deviceorientation', handleOrientation, true);
     window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+  }
+
+  calibrateGyro() {
+    if (this.rawGamma !== undefined && this.rawGamma !== null) {
+      this.calibrationGamma = this.rawGamma;
+    } else {
+      this.calibrationGamma = 0;
+    }
+    this.showToast('Balance neu eingestellt');
   }
 
   /* -------------------------------------------------- */
@@ -2399,34 +2410,58 @@ class SeiltanzerGame {
     this.filteredTiltInput += (this.targetTiltInput - this.filteredTiltInput) * 6.5 * dt;
     let input = this.filteredTiltInput;
 
-    // 2. Multi-Stage Wind Gust System:
+    // 2. Realistic Multi-Stage Wind Gust System:
+    // - Directional Persistence: 75% chance to maintain same side for 2-4 consecutive gusts
     // - Stage 0 (0-12s): No wind
-    // - Stage 1 (Intro Police, eventCount >= 1): Light breeze (0.15 - 0.30)
-    // - Stage 2 (Post-Drone / Sekunde 50+, eventCount >= 2): Strong gust (0.45 - 0.70) + Toast + Louder sound + Particle surge!
+    // - Stage 1 (Intro Police, eventCount >= 1): Medium breeze (0.35 - 0.55)
+    // - Stage 2 (Post-Drone / Sekunde 50+, eventCount >= 2): Full spectrum variance (0.35 - 1.15) with light, medium & storm gusts!
     if ((this.eventCount || 0) >= 1) {
       this.windTimer -= dt;
       if (this.windTimer <= 0) {
-        if (Math.random() < 0.45) {
-          const isStrongWind = (this.eventCount || 0) >= 2;
-          if (isStrongWind) {
-            // Stage 2: Stronger wind (0.45 - 0.70) - challenging but fully controllable!
-            this.windForce = (0.45 + Math.random() * 0.25) * (Math.random() > 0.5 ? 1 : -1);
-            this.windTimer = 4.0 + Math.random() * 3.5;
-            
-            // Trigger Toast warning on strong gust
-            if (!this.hasWarnedStrongWind) {
+        if (Math.random() < 0.48) {
+          // Determine directional persistence: 75% keep last direction, 25% change
+          if (this.lastWindDir === undefined || Math.random() < 0.25) {
+            this.lastWindDir = Math.random() > 0.5 ? 1 : -1;
+          }
+          const dir = this.lastWindDir;
+
+          const isFullWindUnlocked = (this.eventCount || 0) >= 2;
+          let mag = 0.45;
+
+          if (isFullWindUnlocked) {
+            // Stage 2: Full variance across light, medium, strong, and gale force gusts!
+            const roll = Math.random();
+            if (roll < 0.35) {
+              // Medium breeze (0.35 - 0.55)
+              mag = 0.35 + Math.random() * 0.20;
+              this.windTimer = 2.5 + Math.random() * 2.5;
+            } else if (roll < 0.80) {
+              // Strong gust (0.60 - 0.88)
+              mag = 0.60 + Math.random() * 0.28;
+              this.windTimer = 3.5 + Math.random() * 3.5;
+            } else {
+              // Heavy storm gust (0.90 - 1.15)
+              mag = 0.90 + Math.random() * 0.25;
+              this.windTimer = 4.5 + Math.random() * 3.0;
+            }
+
+            // Trigger Toast warning on first heavy gust
+            if (mag >= 0.70 && !this.hasWarnedStrongWind) {
               this.hasWarnedStrongWind = true;
               this.showToast('STARKER SEITENWIND!\nGegenlenken!');
             }
           } else {
-            // Stage 1: Light breeze (0.15 - 0.30)
-            this.windForce = (0.15 + Math.random() * 0.15) * (Math.random() > 0.5 ? 1 : -1);
-            this.windTimer = 3.0 + Math.random() * 3.0;
+            // Stage 1: Medium breeze (0.35 - 0.55)
+            mag = 0.35 + Math.random() * 0.20;
+            this.windTimer = 3.0 + Math.random() * 2.5;
           }
+
+          this.windForce = mag * dir;
+          const isHeavyGust = mag >= 0.65;
 
           if (this.dom && this.dom.windIndicator) {
             this.dom.windIndicator.classList.add('active');
-            if (isStrongWind) {
+            if (isHeavyGust) {
               this.dom.windIndicator.classList.add('strong');
               if (this.dom.windText) this.dom.windText.textContent = 'STARKER WIND';
             } else {
@@ -2439,7 +2474,7 @@ class SeiltanzerGame {
           }
         } else {
           this.windForce = 0;
-          this.windTimer = 2.5;
+          this.windTimer = 2.0 + Math.random() * 2.0;
           if (this.dom && this.dom.windIndicator) {
             this.dom.windIndicator.classList.remove('active');
             this.dom.windIndicator.classList.remove('strong');
