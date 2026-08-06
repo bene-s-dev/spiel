@@ -161,14 +161,27 @@ class SeiltanzerGame {
     this.isModelLoaded = false;
     this.isLoadingRequested = false;
 
-    // Police chase under-cloud variables
+    // Unified Special Event Director (Intro sequence: Police at 12s -> Drone at 36s -> Long Random Mode)
     this.policeActive = false;
-    this.policeTimer = 10.0 + Math.random() * 10.0;
     this.policeZ = 0;
     this.policeSpeed = 0;
     this.policeX = 0;
     this.sirenTime = 0;
- 
+
+    this.droneActive = false;
+    this.droneZ = -350;
+    this.droneY = 1.35;
+    this.droneX = 0;
+    this.droneSpeed = 75;
+    this.droneDodged = false;
+    this.hasWarnedDrone = false;
+    
+    this.eventCount = 0;
+    this.eventTimer = 12.0; // Intro 1 (Police Car) starts at 12s
+    this.hasWarnedStrongWind = false;
+    this.isHoldingSquat = false;
+    this.squatFactor = 0;
+
     this.initMusic();
 
     // Load the global leaderboard on the start screen
@@ -196,6 +209,14 @@ class SeiltanzerGame {
     } catch(err) {
       console.warn('Police audio init warning:', err);
     }
+    try {
+      this.droneSound = new Audio('assets/drone.m4a');
+      this.droneSound.loop = false;
+      this.droneSound.volume = 0.0;
+    } catch(err) {
+      console.warn('Drone audio file init warning:', err);
+    }
+    this.initDroneAudio();
   }
 
   playMusic() {
@@ -239,11 +260,11 @@ class SeiltanzerGame {
     if (this.musicEnabled) {
       if (this.state === GAME_STATE.PLAYING) this.playMusic();
       if (this.dom.btnToggleMusic) this.dom.btnToggleMusic.innerHTML = '🔊 Musik: An';
-      this.showToast('🔊 Musik eingeschaltet');
+      this.showToast('Musik eingeschaltet');
     } else {
       if (this.bgMusic) this.bgMusic.pause();
       if (this.dom.btnToggleMusic) this.dom.btnToggleMusic.innerHTML = '🔇 Musik: Aus';
-      this.showToast('🔇 Musik stummgeschaltet');
+      this.showToast('Musik stummgeschaltet');
     }
   }
 
@@ -251,10 +272,10 @@ class SeiltanzerGame {
     this.sfxEnabled = !this.sfxEnabled;
     if (this.sfxEnabled) {
       if (this.dom.btnToggleSFX) this.dom.btnToggleSFX.innerHTML = '🔊 SFX: An';
-      this.showToast('🔊 Soundeffekte eingeschaltet');
+      this.showToast('Soundeffekte eingeschaltet');
     } else {
       if (this.dom.btnToggleSFX) this.dom.btnToggleSFX.innerHTML = '🔇 SFX: Aus';
-      this.showToast('🔇 Soundeffekte stummgeschaltet');
+      this.showToast('Soundeffekte stummgeschaltet');
     }
   }
 
@@ -312,9 +333,39 @@ class SeiltanzerGame {
     this.currentWalkZ_L = 0.25;
     this.currentWalkZ_R = -0.25;
     this.smoothedWindForce = 0;
+
+    // Unified Event Director reset for clean new game session
     this.policeActive = false;
-    this.policeTimer = 10.0 + Math.random() * 10.0;
+    this.policeElapsedTime = 0;
     if (this.policeGroup) this.policeGroup.visible = false;
+    if (this.policeSound) {
+      try {
+        this.policeSound.pause();
+        this.policeSound.currentTime = 0;
+        this.policeSound.volume = 0.0;
+      } catch(e){}
+    }
+
+    this.droneActive = false;
+    this.hasWarnedDrone = false;
+    if (this.droneGroup) this.droneGroup.visible = false;
+    if (this.droneSound) {
+      try {
+        this.droneSound.pause();
+        this.droneSound.currentTime = 10.0;
+        this.droneSound.volume = 0.0;
+      } catch(e){}
+    }
+    if (this.droneGain && this.droneGain.gain) {
+      try { this.droneGain.gain.setValueAtTime(0, this.audioCtx.currentTime); } catch(e){}
+    }
+
+    // Reset intro sequence: Intro 1 (Police) at 12s, Intro 2 (Drone) at 36s
+    this.eventCount = 0;
+    this.eventTimer = 12.0;
+    this.hasWarnedStrongWind = false;
+    this.isHoldingSquat = false;
+    this.squatFactor = 0;
     if (this.dom.valDistance) this.dom.valDistance.textContent = '0 m';
     if (this.dom.valScore) this.dom.valScore.textContent = '0';
     if (this.dom.balanceNeedle) this.dom.balanceNeedle.style.left = '50%';
@@ -499,25 +550,24 @@ class SeiltanzerGame {
     // Add starry night sky matching the moon
     this.buildStars();
 
-    // 1. Tightrope Wire with Realistic Twisted Steel Cable Texture Pattern
-    const textureLoader = new THREE.TextureLoader();
-    const ropeTexture = textureLoader.load('assets/rope_texture.png');
+    // 1. Tightrope Wire with High-Contrast 3D Twisted Cable Pattern
+    const ropeTexture = this.createTwistedRopeTexture();
     ropeTexture.wrapS = THREE.RepeatWrapping;
     ropeTexture.wrapT = THREE.RepeatWrapping;
-    ropeTexture.repeat.set(4, 500);
+    ropeTexture.repeat.set(3, 120); // 3 strand wraps around, 120 repeats along length for large crisp visible weave
 
-    const ropeGeo = new THREE.CylinderGeometry(0.040, 0.040, 1000, 16);
+    const ropeGeo = new THREE.CylinderGeometry(0.065, 0.065, 1000, 24); // 6.5cm radius heavy-duty cable
     ropeGeo.rotateX(Math.PI / 2);
     const ropeMat = new THREE.MeshStandardMaterial({
       map: ropeTexture,
       bumpMap: ropeTexture,
-      bumpScale: 0.08,
-      metalness: 0.88,
-      roughness: 0.30,
-      color: 0xdddddd
+      bumpScale: 0.25,
+      roughness: 0.55,
+      metalness: 0.40,
+      color: 0xeeeeee
     });
     this.ropeMesh = new THREE.Mesh(ropeGeo, ropeMat);
-    this.ropeMesh.position.set(0, 0, -450);
+    this.ropeMesh.position.set(0, -0.865, -450); // Cable center at Y = -0.865, top surface at Y = -0.80
     this.worldGroup.add(this.ropeMesh);
 
     // Dynamic Rope Support Rings
@@ -544,6 +594,7 @@ class SeiltanzerGame {
     // 3. Clouds & Wind Particles
     this.buildParticles();
     this.buildClouds();
+    this.loadGLTFDrone();
   }
 
   createBuildingMaterials() {
@@ -810,6 +861,177 @@ class SeiltanzerGame {
     this.scene.add(stars);
   }
 
+  initDroneAudio() {
+    if (!this.audioCtx) return;
+    try {
+      this.droneOsc = this.audioCtx.createOscillator();
+      this.droneOsc2 = this.audioCtx.createOscillator();
+      this.droneGain = this.audioCtx.createGain();
+      this.droneFilter = this.audioCtx.createBiquadFilter();
+
+      this.droneOsc.type = 'sawtooth';
+      this.droneOsc.frequency.setValueAtTime(110, this.audioCtx.currentTime);
+
+      this.droneOsc2.type = 'square';
+      this.droneOsc2.frequency.setValueAtTime(220, this.audioCtx.currentTime);
+
+      this.droneFilter.type = 'bandpass';
+      this.droneFilter.frequency.setValueAtTime(450, this.audioCtx.currentTime);
+      this.droneFilter.Q.setValueAtTime(1.5, this.audioCtx.currentTime);
+
+      this.droneGain.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+
+      this.droneOsc.connect(this.droneFilter);
+      this.droneOsc2.connect(this.droneFilter);
+      this.droneFilter.connect(this.droneGain);
+      this.droneGain.connect(this.audioCtx.destination);
+
+      this.droneOsc.start();
+      this.droneOsc2.start();
+    } catch(e) {
+      console.warn("Drone audio init warning:", e);
+    }
+  }
+
+  ensureDroneAudio() {
+    if (!this.audioCtx) {
+      this.initAudio();
+    }
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+    if (this.audioCtx && !this.droneGain) {
+      this.initDroneAudio();
+    }
+  }
+
+  loadGLTFDrone() {
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      this.buildProceduralDrone();
+      return;
+    }
+    const loader = new THREE.GLTFLoader();
+    loader.load('assets/drone.glb', (gltf) => {
+      const drone = gltf.scene;
+      drone.scale.set(0.65, 0.65, 0.65);
+      drone.rotation.set(0, Math.PI, 0); // Face forward towards player
+      drone.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      this.droneGroup = new THREE.Group();
+      this.droneGroup.add(drone);
+
+      // Add micro-sized discrete navigation LEDs (0.015 radius)
+      const ledMatRed = new THREE.MeshBasicMaterial({ color: 0xff0022 });
+      const ledMatGreen = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
+      const ledGeo = new THREE.SphereGeometry(0.015, 12, 12);
+
+      const ledRed = new THREE.Mesh(ledGeo, ledMatRed);
+      ledRed.position.set(-0.65, 0.08, -0.65);
+      this.droneGroup.add(ledRed);
+
+      const ledGreen = new THREE.Mesh(ledGeo, ledMatGreen);
+      ledGreen.position.set(0.65, 0.08, -0.65);
+      this.droneGroup.add(ledGreen);
+
+      // Multiple US Police Strobe Lenses (Front Left & Rear Right Red, Front Right & Rear Left Blue)
+      const strobeGeo = new THREE.SphereGeometry(0.12, 16, 16);
+      this.droneStrobeRedMat = new THREE.MeshBasicMaterial({ color: 0xff0033, transparent: true, opacity: 0.0 });
+      this.droneStrobeBlueMat = new THREE.MeshBasicMaterial({ color: 0x0055ff, transparent: true, opacity: 0.0 });
+
+      // 4 Strobe Lenses around the frame
+      const strobeRed1 = new THREE.Mesh(strobeGeo, this.droneStrobeRedMat);
+      strobeRed1.position.set(-0.5, 0.20, 0.5);
+      this.droneGroup.add(strobeRed1);
+
+      const strobeRed2 = new THREE.Mesh(strobeGeo, this.droneStrobeRedMat);
+      strobeRed2.position.set(0.5, 0.20, -0.5);
+      this.droneGroup.add(strobeRed2);
+
+      const strobeBlue1 = new THREE.Mesh(strobeGeo, this.droneStrobeBlueMat);
+      strobeBlue1.position.set(0.5, 0.20, 0.5);
+      this.droneGroup.add(strobeBlue1);
+
+      const strobeBlue2 = new THREE.Mesh(strobeGeo, this.droneStrobeBlueMat);
+      strobeBlue2.position.set(-0.5, 0.20, -0.5);
+      this.droneGroup.add(strobeBlue2);
+
+      // Intense PointLights for dramatic environment flashing
+      this.droneStrobeRedLight = new THREE.PointLight(0xff0033, 0.0, 30);
+      strobeRed1.add(this.droneStrobeRedLight);
+
+      this.droneStrobeBlueLight = new THREE.PointLight(0x0055ff, 0.0, 30);
+      strobeBlue1.add(this.droneStrobeBlueLight);
+
+      // Front cyan spotlight
+      const headlight = new THREE.SpotLight(0x00f2fe, 8.0, 40, Math.PI / 5, 0.5);
+      headlight.position.set(0, 0, 0.5);
+      const target = new THREE.Object3D();
+      target.position.set(0, -0.5, 10);
+      this.droneGroup.add(target);
+      headlight.target = target;
+      this.droneGroup.add(headlight);
+
+      this.droneGroup.visible = false;
+      this.worldGroup.add(this.droneGroup);
+    }, undefined, (err) => {
+      console.warn('Drone GLB load warning, using procedural fallback:', err);
+      this.buildProceduralDrone();
+    });
+  }
+
+  buildProceduralDrone() {
+    this.droneGroup = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x111622, metalness: 0.8, roughness: 0.3 });
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x22293a, metalness: 0.6, roughness: 0.4 });
+    const propMat = new THREE.MeshBasicMaterial({ color: 0x8899aa, transparent: true, opacity: 0.6 });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), bodyMat);
+    this.droneGroup.add(body);
+
+    for (let angle of [Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4]) {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2), armMat);
+      arm.rotation.z = Math.PI / 2;
+      arm.rotation.y = angle;
+      this.droneGroup.add(arm);
+
+      const prop = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.02, 16), propMat);
+      prop.position.set(Math.cos(angle) * 0.6, 0.15, Math.sin(angle) * 0.6);
+      this.droneGroup.add(prop);
+    }
+
+    const ledMat = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.015, 12, 12), ledMat);
+    led.position.set(0, 0, 0.45);
+    this.droneGroup.add(led);
+
+    // US Police Strobe Lights for procedural fallback
+    const strobeGeo = new THREE.SphereGeometry(0.12, 16, 16);
+    this.droneStrobeRedMat = new THREE.MeshBasicMaterial({ color: 0xff0033, transparent: true, opacity: 0.0 });
+    this.droneStrobeBlueMat = new THREE.MeshBasicMaterial({ color: 0x0055ff, transparent: true, opacity: 0.0 });
+
+    const strobeRed = new THREE.Mesh(strobeGeo, this.droneStrobeRedMat);
+    strobeRed.position.set(-0.5, 0.20, 0.5);
+    this.droneGroup.add(strobeRed);
+
+    const strobeBlue = new THREE.Mesh(strobeGeo, this.droneStrobeBlueMat);
+    strobeBlue.position.set(0.5, 0.20, 0.5);
+    this.droneGroup.add(strobeBlue);
+
+    this.droneStrobeRedLight = new THREE.PointLight(0xff0033, 0.0, 30);
+    strobeRed.add(this.droneStrobeRedLight);
+
+    this.droneStrobeBlueLight = new THREE.PointLight(0x0055ff, 0.0, 30);
+    strobeBlue.add(this.droneStrobeBlueLight);
+
+    this.droneGroup.visible = false;
+    this.worldGroup.add(this.droneGroup);
+  }
+
   createCloudTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
@@ -826,6 +1048,49 @@ class SeiltanzerGame {
     ctx.fillRect(0, 0, 256, 256);
 
     return new THREE.CanvasTexture(canvas);
+  }
+
+  /** Generates a high-resolution procedural 3D spiraling twisted rope texture */
+  createTwistedRopeTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    // Base hemp / steel grey-brown tone
+    ctx.fillStyle = '#8a8580';
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Draw spiraling high-contrast twisted fiber strands
+    const strandWidth = 32;
+    for (let y = -256; y < 512; y += strandWidth) {
+      const grad = ctx.createLinearGradient(0, y, 256, y + 256);
+      grad.addColorStop(0.0, '#3a3632'); // Deep fiber groove (dark shadow)
+      grad.addColorStop(0.3, '#b5b0aa'); // Highlight ridge (bright metal/hemp)
+      grad.addColorStop(0.6, '#efeae4'); // Peak shine
+      grad.addColorStop(0.85, '#6a6560'); // Transition
+      grad.addColorStop(1.0, '#2a2622'); // Deep groove
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(256, y + 256);
+      ctx.lineTo(256, y + 256 + strandWidth * 0.85);
+      ctx.lineTo(0, y + strandWidth * 0.85);
+      ctx.closePath();
+      ctx.fill();
+
+      // Add fine micro-threads inside the strand
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, y + strandWidth * 0.4);
+      ctx.lineTo(256, y + 256 + strandWidth * 0.4);
+      ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
   }
 
   createMoonHaloTexture() {
@@ -911,21 +1176,20 @@ class SeiltanzerGame {
     this.worldGroup.add(this.policeGroup);
 
     const sirenTexture = this.createSirenTexture();
-    const sirenGeo = new THREE.PlaneGeometry(45, 45); // 45 units wide to fit street corridors realistically
+    const sirenGeo = new THREE.PlaneGeometry(120, 120); // 120 units wide for volumetric fog diffusion glow
 
     const blueMat = new THREE.MeshBasicMaterial({
       map: sirenTexture,
       color: 0x0055ff,
       transparent: true,
       opacity: 0.0,
-      depthTest: true,  // Enforce Z-buffer depth testing against opaque skyscraper walls
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
     this.policeBlueGlow = new THREE.Mesh(sirenGeo, blueMat);
     this.policeBlueGlow.rotation.x = -Math.PI / 2;
-    this.policeBlueGlow.position.set(-3, 0, 0); // blue offset
-    this.policeBlueGlow.renderOrder = 15; // Render after opaque buildings (0) but before clouds (20+) for realistic skyscraper occlusion
+    this.policeBlueGlow.position.set(-4, 0, 0); // blue offset
+    this.policeBlueGlow.renderOrder = 35; // Render inside cloud deck (20-56) for realistic diffuse fog glow
     this.policeGroup.add(this.policeBlueGlow);
 
     const redMat = new THREE.MeshBasicMaterial({
@@ -933,14 +1197,13 @@ class SeiltanzerGame {
       color: 0xff0044,
       transparent: true,
       opacity: 0.0,
-      depthTest: true,  // Enforce Z-buffer depth testing against opaque skyscraper walls
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
     this.policeRedGlow = new THREE.Mesh(sirenGeo, redMat);
     this.policeRedGlow.rotation.x = -Math.PI / 2;
-    this.policeRedGlow.position.set(3, 0, 0); // red offset
-    this.policeRedGlow.renderOrder = 15; // Render after opaque buildings (0) but before clouds (20+) for realistic skyscraper occlusion
+    this.policeRedGlow.position.set(4, 0, 0); // red offset
+    this.policeRedGlow.renderOrder = 35; // Render inside cloud deck (20-56) for realistic diffuse fog glow
     this.policeGroup.add(this.policeRedGlow);
   }
 
@@ -1325,13 +1588,33 @@ class SeiltanzerGame {
       }
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') this.targetTiltInput = -1.0;
       else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') this.targetTiltInput = 1.0;
-      else if (e.code === 'Space') this.handleActionClick();
-      else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') this.triggerTrick();
+      else if (e.code === 'Space' || e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        this.isKeyDown = true;
+        if (this.keyHoldTimer) clearTimeout(this.keyHoldTimer);
+        this.keyHoldTimer = setTimeout(() => {
+          if (this.isKeyDown) {
+            this.isHoldingSquat = true;
+          }
+        }, 150);
+      }
+      else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') this.triggerTrick();
     });
 
     window.addEventListener('keyup', (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         this.targetTiltInput = 0;
+      }
+      if (e.code === 'Space' || e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        this.isKeyDown = false;
+        if (this.keyHoldTimer) {
+          clearTimeout(this.keyHoldTimer);
+          this.keyHoldTimer = null;
+        }
+        if (this.isHoldingSquat) {
+          this.isHoldingSquat = false;
+        } else {
+          this.handleActionClick();
+        }
       }
     });
 
@@ -1447,9 +1730,10 @@ class SeiltanzerGame {
       elem.addEventListener('pointerdown', handler);
     };
 
-    // Fullscreen Screen-Tap Handler for Action (Squat/Jump) during gameplay
-    // Excludes top header area (clientY < 80) for pause button / HUD
-    const handleScreenTap = (e) => {
+    // Screen-Tap & Hold Handler for Action & Tricks during gameplay:
+    // Short tap (<150ms) -> Action trick click (1x Jump, 2x Spin, 3x Flip, 4x Squat)
+    // Hold (>=150ms) -> Hold Hocke / Squat (duck to dodge drone, stays down as long as held)
+    const handleScreenPointerDown = (e) => {
       if (this.state !== GAME_STATE.PLAYING) return;
       const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 100);
       if (clientY < 80) return; // Ignore taps in upper 80px header area
@@ -1460,10 +1744,39 @@ class SeiltanzerGame {
         e.stopPropagation();
         e.preventDefault();
       }
-      this.handleActionClick();
+
+      this.isPointerDown = true;
+      if (this.holdTimer) clearTimeout(this.holdTimer);
+
+      // Wait 150ms to check if user holds down or releases
+      this.holdTimer = setTimeout(() => {
+        if (this.isPointerDown) {
+          this.isHoldingSquat = true;
+        }
+      }, 150);
     };
 
-    window.addEventListener('pointerdown', handleScreenTap);
+    const handleScreenPointerUp = (e) => {
+      if (this.state !== GAME_STATE.PLAYING) return;
+      this.isPointerDown = false;
+
+      if (this.holdTimer) {
+        clearTimeout(this.holdTimer);
+        this.holdTimer = null;
+      }
+
+      if (this.isHoldingSquat) {
+        // Was holding squat -> release and stand up!
+        this.isHoldingSquat = false;
+      } else {
+        // Was a quick tap (<150ms) -> trigger action trick click!
+        this.handleActionClick();
+      }
+    };
+
+    window.addEventListener('pointerdown', handleScreenPointerDown);
+    window.addEventListener('pointerup', handleScreenPointerUp);
+    window.addEventListener('pointercancel', handleScreenPointerUp);
 
     bindBtnClick(this.dom.btnPause, () => this.pauseGame());
     bindBtnClick(this.dom.btnResume, () => this.resumeGame());
@@ -1620,6 +1933,7 @@ class SeiltanzerGame {
       whiteNoise.start();
 
       this.audioInitialized = true;
+      this.initDroneAudio();
     } catch (e) {
       console.warn("Web Audio API not supported", e);
     }
@@ -1791,15 +2105,6 @@ class SeiltanzerGame {
       clearTimeout(this.clickTimer);
     }
 
-    const feedbackMsgs = {
-      1: '1x Sprung ⬆️',
-      2: '2x Sprung & Drehung 🔄',
-      3: '3x Salto 🤸‍♀️',
-      4: '4x In die Hocke 🧘'
-    };
-    const countClamped = Math.min(4, this.clickCount);
-    this.showToast(feedbackMsgs[countClamped] || `${countClamped}x Hocke 🧘`);
-
     this.clickTimer = setTimeout(() => {
       const finalCount = this.clickCount;
       this.clickCount = 0;
@@ -1891,14 +2196,16 @@ class SeiltanzerGame {
   showToast(msg) {
     const toast = document.createElement('div');
     toast.style.cssText = `
-      position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,242,254,0.9); color: #000; font-weight: 800; font-size: 12px;
-      padding: 6px 16px; border-radius: 20px; z-index: 100; pointer-events: none;
-      box-shadow: 0 4px 15px rgba(0,242,254,0.5);
+      position: fixed; top: 75px; left: 50%; transform: translateX(-50%);
+      background: rgba(0, 242, 254, 0.95); color: #050b14; font-weight: 800; font-size: 13px;
+      line-height: 1.4; padding: 8px 22px; border-radius: 24px; z-index: 99999; pointer-events: none;
+      box-shadow: 0 6px 22px rgba(0, 242, 254, 0.65); text-align: center; white-space: pre-line;
+      max-width: 85vw; border: 1.5px solid #ffffff; backdrop-filter: blur(10px);
+      animation: toastFade 1.8s ease-in-out forwards;
     `;
     toast.textContent = msg;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 1800);
+    setTimeout(() => toast.remove(), 2200);
   }
 
   gameOver(reason) {
@@ -1913,12 +2220,15 @@ class SeiltanzerGame {
       localStorage.setItem('seiltanzer_highscore', this.highScore.toString());
     }
 
-    // Populate Game Over Stats
-    this.dom.fallReason.textContent = reason;
-    this.dom.statDist.textContent = `${Math.floor(this.distance)} m`;
-    this.dom.statTricks.textContent = this.tricksCount;
-    this.dom.statScore.textContent = this.score;
-    this.dom.statHigh.textContent = this.highScore;
+    // Populate Game Over Stats & Fall Reason
+    const fallMsg = reason || this.fallReason || (this.balance > 0 ? "Nach rechts abgestürzt!" : "Nach links abgestürzt!");
+    if (this.dom.fallReason) {
+      this.dom.fallReason.textContent = fallMsg;
+    }
+    if (this.dom.statDist) this.dom.statDist.textContent = `${Math.floor(this.distance)} m`;
+    if (this.dom.statTricks) this.dom.statTricks.textContent = this.tricksCount;
+    if (this.dom.statScore) this.dom.statScore.textContent = this.score;
+    if (this.dom.statHigh) this.dom.statHigh.textContent = this.highScore;
 
     // Automatic score submission in background using the name from start modal
     const name = localStorage.getItem('seiltanzer_username') || 'Spieler';
@@ -1973,6 +2283,18 @@ class SeiltanzerGame {
     if (this.dom.gameoverLeaderboard) this.dom.gameoverLeaderboard.style.display = '';
     if (this.dom.gameoverLbList) this.dom.gameoverLbList.innerHTML = '<div class="lb-loading">Lade Bestenliste…</div>';
     const scores = await window.HighscoreDB.fetchTopScores(10);
+    
+    // Sync true personal highscore from online database if available
+    if (scores && Array.isArray(scores) && submittedName) {
+      const myScores = scores.filter(s => s.name === submittedName);
+      if (myScores.length > 0) {
+        const trueBest = Math.max(...myScores.map(s => s.score));
+        this.highScore = Math.max(trueBest, this.score);
+        localStorage.setItem('seiltanzer_highscore', this.highScore.toString());
+        if (this.dom.statHigh) this.dom.statHigh.textContent = this.highScore;
+      }
+    }
+
     this._renderLeaderboard(this.dom.gameoverLbList, scores, submittedName, submittedScore);
   }
 
@@ -2077,29 +2399,72 @@ class SeiltanzerGame {
     this.filteredTiltInput += (this.targetTiltInput - this.filteredTiltInput) * 6.5 * dt;
     let input = this.filteredTiltInput;
 
-    // 2. Wind Gust System
-    this.windTimer -= dt;
-    if (this.windTimer <= 0) {
-      if (Math.random() < 0.4) {
-        this.windForce = (0.4 + Math.random() * 0.6) * (Math.random() > 0.5 ? 1 : -1);
-        this.windTimer = 3.5 + Math.random() * 4;
-        this.dom.windIndicator.classList.add('active');
-        this.dom.windArrow.style.transform = `rotate(${this.windForce > 0 ? 0 : 180}deg)`;
-      } else {
-        this.windForce = 0;
-        this.windTimer = 2.5;
+    // 2. Multi-Stage Wind Gust System:
+    // - Stage 0 (0-12s): No wind
+    // - Stage 1 (Intro Police, eventCount >= 1): Light breeze (0.15 - 0.30)
+    // - Stage 2 (Post-Drone / Sekunde 50+, eventCount >= 2): Strong gust (0.45 - 0.70) + Toast + Louder sound + Particle surge!
+    if ((this.eventCount || 0) >= 1) {
+      this.windTimer -= dt;
+      if (this.windTimer <= 0) {
+        if (Math.random() < 0.45) {
+          const isStrongWind = (this.eventCount || 0) >= 2;
+          if (isStrongWind) {
+            // Stage 2: Stronger wind (0.45 - 0.70) - challenging but fully controllable!
+            this.windForce = (0.45 + Math.random() * 0.25) * (Math.random() > 0.5 ? 1 : -1);
+            this.windTimer = 4.0 + Math.random() * 3.5;
+            
+            // Trigger Toast warning on strong gust
+            if (!this.hasWarnedStrongWind) {
+              this.hasWarnedStrongWind = true;
+              this.showToast('STARKER SEITENWIND!\nGegenlenken!');
+            }
+          } else {
+            // Stage 1: Light breeze (0.15 - 0.30)
+            this.windForce = (0.15 + Math.random() * 0.15) * (Math.random() > 0.5 ? 1 : -1);
+            this.windTimer = 3.0 + Math.random() * 3.0;
+          }
+
+          if (this.dom && this.dom.windIndicator) {
+            this.dom.windIndicator.classList.add('active');
+            if (isStrongWind) {
+              this.dom.windIndicator.classList.add('strong');
+              if (this.dom.windText) this.dom.windText.textContent = 'STARKER WIND';
+            } else {
+              this.dom.windIndicator.classList.remove('strong');
+              if (this.dom.windText) this.dom.windText.textContent = 'LEICHTER WIND';
+            }
+            if (this.dom.windArrow) {
+              this.dom.windArrow.style.transform = `rotate(${this.windForce > 0 ? 0 : 180}deg)`;
+            }
+          }
+        } else {
+          this.windForce = 0;
+          this.windTimer = 2.5;
+          if (this.dom && this.dom.windIndicator) {
+            this.dom.windIndicator.classList.remove('active');
+            this.dom.windIndicator.classList.remove('strong');
+          }
+        }
+      }
+    } else {
+      this.windForce = 0;
+      if (this.dom && this.dom.windIndicator) {
         this.dom.windIndicator.classList.remove('active');
+        this.dom.windIndicator.classList.remove('strong');
       }
     }
 
     // Smooth out wind force transitions to prevent jerky changes
     this.smoothedWindForce += (this.windForce - this.smoothedWindForce) * 2.5 * dt;
 
-    // Smooth Wind Sound Audio Gain Fade-In (Anschwellen) & Fade-Out (Abklingen)
+    // Smooth Wind Sound Audio Gain Fade-In & Fade-Out (Louder volume for strong wind!)
     if (this.windSoundGain) {
-      const targetGain = (this.sfxEnabled && this.state === GAME_STATE.PLAYING) ? (0.02 + Math.abs(this.smoothedWindForce) * 0.18) : 0;
+      const isStrongWind = (this.eventCount || 0) >= 2;
+      const baseGain = isStrongWind ? 0.04 : 0.02;
+      const multGain = isStrongWind ? 0.35 : 0.18;
+      const targetGain = (this.sfxEnabled && this.state === GAME_STATE.PLAYING) ? (baseGain + Math.abs(this.smoothedWindForce) * multGain) : 0;
       const currentGain = this.windSoundGain.gain.value;
-      const fadeSpeed = (this.windForce !== 0) ? 2.8 : 1.2; // Zügiges Anschwellen, sanftes Ausklingen
+      const fadeSpeed = (this.windForce !== 0) ? 2.8 : 1.2;
       this.windSoundGain.gain.value += (targetGain - currentGain) * fadeSpeed * dt;
     }
 
@@ -2161,9 +2526,11 @@ class SeiltanzerGame {
       return;
     }
 
-    // 5. Forward Distance & Score Tracking (Scale by 0.20 to count meters at a realistic walking speed of ~0.84 m/s)
-    this.distance += this.forwardSpeed * dt * 0.20;
-    this.score += Math.floor(this.forwardSpeed * dt * 0.20 * 10);
+    // 5. Forward Distance & Score Tracking (Paused during squat/hocke)
+    if ((this.squatFactor || 0) <= 0.05) {
+      this.distance += this.forwardSpeed * dt * 0.20;
+      this.score += Math.floor(this.forwardSpeed * dt * 0.20 * 10);
+    }
 
     this.dom.valDistance.textContent = `${Math.floor(this.distance)} m`;
     this.dom.valScore.textContent = this.score;
@@ -2245,7 +2612,6 @@ class SeiltanzerGame {
           if (b && b.userData.initQ) b.quaternion.copy(b.userData.initQ);
         });
         this.inAirTrick = null;
-        this.showToast("Perfekte Hocke!");
       }
     } else if (this.isJumping) {
       if (this.isAnticipatingJump) {
@@ -2575,7 +2941,6 @@ class SeiltanzerGame {
 
         if (Math.abs(this.balance) > 0.4) {
           this.balance += Math.sign(this.balance) * 0.35;
-          this.showToast("Wackelige Landung!");
         }
 
         this.leftFootWireZ = 0.25;
@@ -2590,8 +2955,73 @@ class SeiltanzerGame {
     }
   }
   let stepSine = 0;
-    // 7. LANDING ABSORPTION OR REAL PROCEDURAL IK GAIT
-    if (this.landingAbsorptionTimer > 0) {
+    // 6.5 SQUAT (HOCKE) HOLD POSE OR LANDING ABSORPTION OR GAIT
+    const targetSquat = (this.isHoldingSquat && !this.isJumping) ? 1.0 : 0.0;
+    this.squatFactor = THREE.MathUtils.lerp(this.squatFactor || 0, targetSquat, 12 * dt);
+
+    if (this.squatFactor > 0.01 && !this.isJumping) {
+      const p = this.squatFactor;
+
+      // 1. Root & Pelvis Movement: Sink pelvic root down vertically (-0.45m max)
+      const hipDropY = -p * 0.45;
+      if (this.hipsGroup) {
+        this.hipsGroup.position.y = hipDropY;
+        this.hipsGroup.position.z = 0;
+      }
+      if (this.spineGroup) {
+        this.spineGroup.rotation.x = p * 0.25; // Spine bends forward to balance center of gravity over feet
+      }
+
+      // 2. Foot Constraints (IK Lock 100%):
+      // Fix left foot in front (Z=+0.22, X=0) and right foot behind (Z=-0.22, X=0) on rope top surface (Y=-0.80)
+      // Since pelvis dropped by hipDropY, relative foot Y target to pelvis is: -0.80 - hipDropY
+      const targetFootY = -0.80 - hipDropY;
+      const hipOffsetL = 0.14;
+      const hipOffsetR = -0.14;
+
+      // Analytical 2-link IK solver call for left (front) & right (back) leg
+      const ikL = this._solveIK(hipOffsetL, 0, 0, 0.0, targetFootY, 0.22);
+      const ikR = this._solveIK(hipOffsetR, 0, 0, 0.0, targetFootY, -0.22);
+
+      // Knee pole target flare (slight outward splay for natural knee bending without joint collision)
+      const kneeOutL = p * 0.20;
+      const kneeOutR = -p * 0.20;
+
+      // Apply IK Rotations to bones:
+      // Left leg (front foot)
+      const qHipL = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(1, 0, 0), ikL.hipX)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), ikL.hipZ + kneeOutL));
+      const qKneeL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -ikL.kneeX);
+      const qAnkleL = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(1, 0, 0), ikL.kneeX - ikL.hipX)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), 0.10));
+
+      // Right leg (back foot)
+      const qHipR = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(1, 0, 0), ikR.hipX)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), ikR.hipZ + kneeOutR));
+      const qKneeR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -ikR.kneeX);
+      const qAnkleR = new THREE.Quaternion()
+        .setFromAxisAngle(new THREE.Vector3(1, 0, 0), ikR.kneeX - ikR.hipX)
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -0.10));
+
+      // 3. Balance Arms extended wide with realistic micro-sway stabilization
+      const time = this.clock.getElapsedTime();
+      const microSway = Math.sin(time * 8.0) * 0.03 * p;
+      const qSquatArmL = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -p * 0.40 + microSway);
+      const qSquatArmR = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), p * 0.40 - microSway);
+
+      // Multiply onto bone initial quaternions
+      if (this.leftUpLegBone  && this.leftUpLegBone.userData.initQ)  this.leftUpLegBone.quaternion.copy(this.leftUpLegBone.userData.initQ).multiply(qHipL);
+      if (this.rightUpLegBone && this.rightUpLegBone.userData.initQ) this.rightUpLegBone.quaternion.copy(this.rightUpLegBone.userData.initQ).multiply(qHipR);
+      if (this.leftLegBone    && this.leftLegBone.userData.initQ)    this.leftLegBone.quaternion.copy(this.leftLegBone.userData.initQ).multiply(qKneeL);
+      if (this.rightLegBone   && this.rightLegBone.userData.initQ)   this.rightLegBone.quaternion.copy(this.rightLegBone.userData.initQ).multiply(qKneeR);
+      if (this.leftFootBone   && this.leftFootBone.userData.initQ)   this.leftFootBone.quaternion.copy(this.leftFootBone.userData.initQ).multiply(qAnkleL);
+      if (this.rightFootBone  && this.rightFootBone.userData.initQ)  this.rightFootBone.quaternion.copy(this.rightFootBone.userData.initQ).multiply(qAnkleR);
+      if (this.leftArmBone    && this.leftArmBone.userData.initQ)    this.leftArmBone.quaternion.copy(this.leftArmBone.userData.initQ).multiply(qSquatArmL);
+      if (this.rightArmBone   && this.rightArmBone.userData.initQ)   this.rightArmBone.quaternion.copy(this.rightArmBone.userData.initQ).multiply(qSquatArmR);
+    } else if (this.landingAbsorptionTimer > 0) {
       this.landingAbsorptionTimer -= dt;
       const ap = Math.max(0.0, this.landingAbsorptionTimer / 0.25);
       const p = Math.sin(ap * Math.PI); // dip factor: 0 -> 1 -> 0
@@ -2696,8 +3126,8 @@ class SeiltanzerGame {
 
       // Parabolic lift height for the swing foot
       const liftY = Math.sin(t * Math.PI) * 0.08;
-      const leftFootY = -0.90 + (this.stanceLeg === 'right' ? liftY : 0);
-      const rightFootY = -0.90 + (this.stanceLeg === 'left' ? liftY : 0);
+      const leftFootY = -0.80 + (this.stanceLeg === 'right' ? liftY : 0); // Top of rope at Y = -0.80
+      const rightFootY = -0.80 + (this.stanceLeg === 'left' ? liftY : 0);  // Top of rope at Y = -0.80
 
       // Torque/twist using swing progress for torso twist
       stepSine = (this.stanceLeg === 'right' ? 1 : -1) * Math.sin(t * Math.PI);
@@ -2837,7 +3267,9 @@ class SeiltanzerGame {
   }
 
   updateWorld(dt) {
-    const moveZ = this.forwardSpeed * dt;
+    // Stop world forward movement when character is squatting in Hocke
+    const currentSpeed = (this.squatFactor || 0) > 0.05 ? 0 : this.forwardSpeed;
+    const moveZ = currentSpeed * dt;
 
     if (this.ropeRings) {
       for (let ring of this.ropeRings) {
@@ -2888,115 +3320,291 @@ class SeiltanzerGame {
       }
     }
 
-    // Police chase under-cloud sirens update
-    if (this.policeGroup) {
-      if (!this.policeActive) {
-        this.policeTimer = (this.policeTimer || 10.0) - dt;
-        if (this.policeTimer <= 0) {
+    // Unified Special Event Director (Intro sequence: Police at 12s -> Drone at 36s -> Long Random Mode)
+    if (!this.policeActive && !this.droneActive) {
+      this.eventTimer = (this.eventTimer || 12.0) - dt;
+      if (this.eventTimer <= 0) {
+        this.eventCount = (this.eventCount || 0) + 1;
+        let pickPolice = false;
+
+        if (this.eventCount === 1) {
+          // Intro 1: Always Police Car first to introduce siren & fog lights!
+          pickPolice = true;
+        } else if (this.eventCount === 2) {
+          // Intro 2: Always Drone second to introduce squat dodge!
+          pickPolice = false;
+        } else {
+          // Post-Intro: 50% Police Car, 50% Drone completely random!
+          pickPolice = Math.random() < 0.50;
+        }
+
+        if (pickPolice) {
+          // Trigger Police Car
           this.policeActive = true;
-          this.policeGroup.visible = false; // Hide lights initially for 1.5s sound lead-in
+          if (this.policeGroup) this.policeGroup.visible = false;
           this.policeElapsedTime = 0;
           this.sirenTime = 0;
-
-          // Position on a street to the left or right of the wire
           this.policeX = Math.random() > 0.5 ? (-25 - Math.random() * 20) : (25 + Math.random() * 20);
-
-          // Always start near the player and speed away into the far distance (negative Z)
           this.policeZ = -15;
-          this.policeSpeed = -85; // Calibrated so that it speeds away and disappears in ~9-11 seconds
+          this.policeSpeed = -85;
+          if (this.policeGroup) this.policeGroup.position.set(this.policeX, -38.5, this.policeZ);
 
-          this.policeGroup.position.set(this.policeX, -42.0, this.policeZ);
-
-          // Play the siren sound 1.5s BEFORE lights become visible
           if (this.policeSound && this.sfxEnabled && this.state === GAME_STATE.PLAYING) {
-            this.policeSound.volume = 0.0;
-            this.policeSound.currentTime = 0;
-            const playPromise = this.policeSound.play();
-            if (playPromise !== undefined) {
-              playPromise.catch(error => {
-                console.warn("Police sound playback interrupted:", error);
-              });
-            }
+            try {
+              this.policeSound.volume = 0.0;
+              this.policeSound.currentTime = 0;
+              this.policeSound.play().catch(() => {});
+            } catch(e){}
           }
-        }
-      } else {
-        this.policeElapsedTime += dt;
-
-        // Sound starts at t=0, light becomes visible and starts driving at t=1.5s (1.5s after sound starts)
-        const lightDelay = 1.5;
-        if (this.policeElapsedTime >= lightDelay) {
-          this.policeGroup.visible = true;
-          // Move along Z, accounting for city scrolling (moveZ) so it stays anchored to the streets
-          this.policeZ += this.policeSpeed * dt + moveZ;
-          this.policeGroup.position.z = this.policeZ;
         } else {
-          this.policeGroup.visible = false;
-        }
+          // Trigger Drone
+          this.droneActive = true;
+          if (this.droneGroup) this.droneGroup.visible = true;
+          this.droneZ = -350;
+          this.droneY = 1.35;
+          const approachSides = [-5.5, 0.0, 5.5];
+          const choice = approachSides[Math.floor(Math.random() * approachSides.length)];
+          this.droneStartX = choice + (Math.random() - 0.5) * 1.5;
+          this.droneX = this.droneStartX;
+          this.droneSpeed = 75;
+          this.droneDodged = false;
+          this.droneIsFadingOut = false;
+          this.droneFadeTimer = 0;
 
-        // Dynamic Siren Sound Volume:
-        // Fade-in over first 1.5s (before light appears)
-        // Hold volume from 1.5s to 5.5s
-        // Gradual fade-out over 5s (5.5s to 10.5s) as car drives into distance
-        if (this.policeSound) {
-          let targetVol = 0.65;
-          if (this.policeElapsedTime < 1.5) {
-            targetVol *= (this.policeElapsedTime / 1.5); // Fade in over 1.5s before light appears
-          } else if (this.policeElapsedTime >= 5.5) {
-            const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 5.5) / 5.0);
-            targetVol *= (1.0 - fadeProgress); // Long gradual fade-out over 5s (5.5s to 10.5s)
+          if (this.droneSound && this.sfxEnabled && this.state === GAME_STATE.PLAYING) {
+            try {
+              this.droneSound.volume = 0.0;
+              this.droneSound.currentTime = 10.0;
+              this.droneSound.play().catch(() => {});
+            } catch(e){}
           }
-          // Turn off sound immediately if paused or game state is not playing
-          this.policeSound.volume = targetVol * (this.sfxEnabled && this.state === GAME_STATE.PLAYING ? 1 : 0);
-
-          if (this.policeElapsedTime >= 10.5 && !this.policeSound.paused) {
-            this.policeSound.pause();
-          }
-        }
-
-        // Flash sirens rapidly (rapid blue/red alternate) when light is visible
-        if (this.policeElapsedTime >= lightDelay) {
-          this.sirenTime += dt;
-          const cycle = Math.floor(this.sirenTime * 16) % 4; // 16 Hz cycle
-          if (cycle === 0) {
-            this.policeBlueGlow.material.opacity = 0.90;
-            this.policeRedGlow.material.opacity = 0.0;
-          } else if (cycle === 1) {
-            this.policeBlueGlow.material.opacity = 0.0;
-            this.policeRedGlow.material.opacity = 0.0;
-          } else if (cycle === 2) {
-            this.policeBlueGlow.material.opacity = 0.0;
-            this.policeRedGlow.material.opacity = 0.90;
-          } else {
-            this.policeBlueGlow.material.opacity = 0.0;
-            this.policeRedGlow.material.opacity = 0.0;
-          }
-        }
-
-        // Check if finished (out of bounds relative to camera viewport, or timed out at 11s)
-        const outOfBounds = this.policeZ < -780;
-        if (outOfBounds || this.policeElapsedTime >= 11.0) {
-          this.policeActive = false;
-          this.policeGroup.visible = false;
-          // Set random timer for the next chase (min 15 seconds, up to 35 seconds)
-          this.policeTimer = 15.0 + Math.random() * 20.0;
-
-          if (this.policeSound) {
-            this.policeSound.pause();
-            this.policeSound.currentTime = 0;
+          this.ensureDroneAudio();
+          if (!this.hasWarnedDrone) {
+            this.hasWarnedDrone = true;
+            this.showToast('DROHNE NÄHERT SICH!\nHALTE HOCKE zum Ausweichen!');
           }
         }
       }
     }
 
-    if (this.particles) {
+    // Active Police Chase Update
+    if (this.policeGroup && this.policeActive) {
+      this.policeElapsedTime += dt;
+
+      // Sound starts at t=0, light becomes visible and starts driving at t=1.5s
+      const lightDelay = 1.5;
+      if (this.policeElapsedTime >= lightDelay) {
+        this.policeGroup.visible = true;
+        this.policeZ += this.policeSpeed * dt + moveZ;
+        this.policeGroup.position.z = this.policeZ;
+      } else {
+        this.policeGroup.visible = false;
+      }
+
+      // Dynamic Siren Sound Volume:
+      // Fade-in over first 1.5s
+      // Hold full volume from 1.5s to 3.5s
+      // Smooth quadratic 8-second fade-out from 3.5s to 11.5s down to 0.0
+      if (this.policeSound) {
+        let targetVol = 0.85;
+        if (this.policeElapsedTime < 1.5) {
+          targetVol *= (this.policeElapsedTime / 1.5);
+        } else if (this.policeElapsedTime >= 3.5) {
+          const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 3.5) / 8.0);
+          targetVol *= Math.pow(1.0 - fadeProgress, 2.5);
+        }
+        const sfx = (this.sfxEnabled && this.state === GAME_STATE.PLAYING ? 1 : 0);
+        this.policeSound.volume = Math.max(0, Math.min(1, targetVol * sfx));
+
+        if (this.policeElapsedTime >= 12.0 && !this.policeSound.paused) {
+          this.policeSound.pause();
+          this.policeSound.volume = 0.0;
+        }
+      }
+
+      // Flash sirens rapidly (rapid blue/red alternate)
+      if (this.policeElapsedTime >= lightDelay) {
+        this.sirenTime += dt;
+        const cycle = Math.floor(this.sirenTime * 16) % 4;
+        if (cycle === 0) {
+          this.policeBlueGlow.material.opacity = 0.90;
+          this.policeRedGlow.material.opacity = 0.0;
+        } else if (cycle === 1) {
+          this.policeBlueGlow.material.opacity = 0.0;
+          this.policeRedGlow.material.opacity = 0.0;
+        } else if (cycle === 2) {
+          this.policeBlueGlow.material.opacity = 0.0;
+          this.policeRedGlow.material.opacity = 0.90;
+        } else {
+          this.policeBlueGlow.material.opacity = 0.0;
+          this.policeRedGlow.material.opacity = 0.0;
+        }
+      }
+
+      const outOfBounds = this.policeZ < -1100;
+      if (outOfBounds || this.policeElapsedTime >= 12.0) {
+        this.policeActive = false;
+        this.policeGroup.visible = false;
+        
+        // Intro phase vs. Post-Intro timing
+        if ((this.eventCount || 0) < 2) {
+          this.eventTimer = 12.0; // Short 12s pause before Intro 2 (Drone)
+        } else {
+          this.eventTimer = 70.0 + Math.random() * 80.0; // Long 70-150s random pause
+        }
+
+        if (this.policeSound) {
+          try {
+            this.policeSound.pause();
+            this.policeSound.volume = 0.0;
+            this.policeSound.currentTime = 0;
+          } catch(e){}
+        }
+      }
+    }
+
+    // Active Drone Update
+    if (this.droneGroup && this.droneActive) {
+      // Move drone along Z towards player
+      this.droneZ += this.droneSpeed * dt + moveZ;
+
+        // Curving flight trajectory: starts from droneStartX and curves smoothly onto centerline X=0 as it nears player
+        const flyProgress = Math.max(0.0, Math.min(1.0, (this.droneZ - (-350)) / 350));
+        this.droneX = THREE.MathUtils.lerp(this.droneStartX || 0, 0.0, Math.pow(flyProgress, 0.65));
+
+        // Wobble & banking flight animation (banks into its turn)
+        this.droneTime = (this.droneTime || 0) + dt;
+        const wobbleY = Math.sin(this.droneTime * 6) * 0.08;
+        const bankAngle = (1.0 - flyProgress) * ((this.droneStartX || 0) * 0.04);
+        this.droneGroup.position.set(this.droneX, this.droneY + wobbleY, this.droneZ);
+        this.droneGroup.rotation.z = Math.sin(this.droneTime * 8) * 0.08 - bankAngle;
+
+        // Intense 24Hz US Police Double-Flash Strobe Lights (Flash-Flash Red, Flash-Flash Blue)
+        const strobeCycle = Math.floor(this.droneTime * 24) % 8;
+        if (strobeCycle === 0 || strobeCycle === 1) {
+          if (this.droneStrobeRedMat) this.droneStrobeRedMat.opacity = 1.0;
+          if (this.droneStrobeBlueMat) this.droneStrobeBlueMat.opacity = 0.0;
+          if (this.droneStrobeRedLight) this.droneStrobeRedLight.intensity = 16.0;
+          if (this.droneStrobeBlueLight) this.droneStrobeBlueLight.intensity = 0.0;
+        } else if (strobeCycle === 4 || strobeCycle === 5) {
+          if (this.droneStrobeRedMat) this.droneStrobeRedMat.opacity = 0.0;
+          if (this.droneStrobeBlueMat) this.droneStrobeBlueMat.opacity = 1.0;
+          if (this.droneStrobeRedLight) this.droneStrobeRedLight.intensity = 0.0;
+          if (this.droneStrobeBlueLight) this.droneStrobeBlueLight.intensity = 16.0;
+        } else {
+          if (this.droneStrobeRedMat) this.droneStrobeRedMat.opacity = 0.0;
+          if (this.droneStrobeBlueMat) this.droneStrobeBlueMat.opacity = 0.0;
+          if (this.droneStrobeRedLight) this.droneStrobeRedLight.intensity = 0.0;
+          if (this.droneStrobeBlueLight) this.droneStrobeBlueLight.intensity = 0.0;
+        }
+
+        // Dynamic Drone Sound Control (assets/drone.m4a):
+        // 1. Fade-in as drone approaches (from Z = -350 to Z = 0)
+        const dist = Math.abs(this.droneZ);
+        const prox = Math.max(0, 1 - dist / 300);
+        let targetVol = Math.pow(prox, 1.4) * 0.85;
+
+        // 2. Trigger Fade-Out when player ducks (squatFactor >= 0.4) or drone passes (droneZ >= 0 / dodged)
+        if (this.squatFactor >= 0.4 || this.droneDodged || this.droneZ >= 0) {
+          this.droneIsFadingOut = true;
+        }
+
+        if (this.droneIsFadingOut) {
+          this.droneFadeTimer = (this.droneFadeTimer || 0) + dt;
+          const fadeProgress = Math.min(1.0, this.droneFadeTimer / 2.5); // 2.5s long smooth fade-out
+          targetVol *= Math.pow(1.0 - fadeProgress, 2.0); // Soft quadratic curve down to 0
+        }
+
+        if (this.droneSound) {
+          const sfxFactor = (this.sfxEnabled && this.state === GAME_STATE.PLAYING) ? 1 : 0;
+          this.droneSound.volume = Math.max(0, Math.min(1, targetVol * sfxFactor));
+          if (this.droneIsFadingOut && this.droneFadeTimer >= 2.5 && !this.droneSound.paused) {
+            this.droneSound.pause();
+            this.droneSound.volume = 0.0;
+          }
+        }
+
+        // Web Audio Synthesizer fallback Doppler shift
+        this.ensureDroneAudio();
+        if (this.audioCtx) {
+          const synthVol = Math.pow(prox, 1.8) * 0.40 * (this.sfxEnabled && this.state === GAME_STATE.PLAYING ? 1 : 0);
+          const freq = 115 + prox * 50;
+
+          if (this.droneGain && this.droneGain.gain) {
+            this.droneGain.gain.setValueAtTime(this.droneIsFadingOut ? 0 : synthVol, this.audioCtx.currentTime);
+          }
+          if (this.droneOsc && this.droneOsc.frequency) {
+            this.droneOsc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
+          }
+          if (this.droneOsc2 && this.droneOsc2.frequency) {
+            this.droneOsc2.frequency.setValueAtTime(freq * 2, this.audioCtx.currentTime);
+          }
+        }
+
+        // COLLISION CHECK when drone is passing right over character (-1.8 <= droneZ <= 1.2)
+        if (this.droneZ >= -1.8 && this.droneZ <= 1.2) {
+          // Effective head height of character (standing = 1.65, full squat = 0.85)
+          const effectiveHeadY = 1.65 - 0.80 * (this.squatFactor || 0);
+
+          // If character's head is higher than 1.05 (not squatting low enough), COLLISION!
+          if (effectiveHeadY > 1.05) {
+            this.state = GAME_STATE.FALLING;
+            this.stopMusic();
+            this.playFallSound();
+            if (this.droneSound && !this.droneSound.paused) {
+              try { this.droneSound.pause(); } catch(e){}
+            }
+            if (this.windSoundGain) this.windSoundGain.gain.value = 0;
+            if (this.droneGain && this.droneGain.gain) {
+              try { this.droneGain.gain.setValueAtTime(0, this.audioCtx.currentTime); } catch(e){}
+            }
+            this.fallVelocityY = 0;
+            this.fallDirection = Math.random() > 0.5 ? 1 : -1;
+            this.fallReason = "Kollision mit Drohne!";
+            this.showToast("KOLLISION MIT DROHNE!");
+            return;
+          } else if (!this.droneDodged) {
+            this.droneDodged = true;
+            this.score += 350;
+            this.showToast('DROHNEN-AUSWEICHEN! +350 PTS');
+            if (this.dom.valScore) this.dom.valScore.textContent = Math.floor(this.score);
+          }
+        }
+
+        // Out of bounds (passed camera: allow to fly far past to Z > 120 so audio fades out smoothly)
+        if (this.droneZ > 120) {
+          this.droneActive = false;
+          this.droneGroup.visible = false;
+          if (this.droneSound && !this.droneSound.paused) {
+            try {
+              this.droneSound.pause();
+              this.droneSound.volume = 0.0;
+            } catch(e){}
+          }
+          if (this.droneGain && this.droneGain.gain) {
+            try { this.droneGain.gain.setValueAtTime(0, this.audioCtx.currentTime); } catch(e){}
+          }
+
+          // Intro phase vs. Post-Intro timing
+          if ((this.eventCount || 0) < 2) {
+            this.eventTimer = 12.0; // Short 12s pause
+          } else {
+            this.eventTimer = 70.0 + Math.random() * 80.0; // Long 70-150s random pause
+          }
+        }
+      }
+
+    if (this.particles && this.particles.geometry) {
       const positions = this.particles.geometry.attributes.position.array;
-      const windDriftX = this.smoothedWindForce * 18 * dt;
+      const isStrongWind = (this.eventCount || 0) >= 2;
+      const driftSpeed = isStrongWind ? 32 : 18;
+      const windDriftX = this.smoothedWindForce * driftSpeed * dt;
 
       // Adjust particle visibility and size dynamically based on wind intensity
       if (this.particles.material) {
         const windIntensity = Math.abs(this.smoothedWindForce);
-        this.particles.material.opacity = 0.45 + windIntensity * 0.45;
-        this.particles.material.size = 0.14 + windIntensity * 0.12;
+        this.particles.material.opacity = 0.40 + windIntensity * 0.55;
+        this.particles.material.size = (isStrongWind ? 0.16 : 0.12) + windIntensity * 0.18;
       }
 
       for (let i = 2; i < positions.length; i += 3) {
