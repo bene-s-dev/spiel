@@ -478,7 +478,7 @@ class SeiltanzerGame {
 
     // Moon sphere mesh
     const moonGeo = new THREE.SphereGeometry(7, 32, 32);
-    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfffef0 });
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfffef0, fog: false });
     const moon = new THREE.Mesh(moonGeo, moonMat);
     moonGroup.add(moon);
 
@@ -489,7 +489,8 @@ class SeiltanzerGame {
       map: moonHaloTexture,
       transparent: true,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      fog: false
     });
     const halo = new THREE.Mesh(haloGeo, haloMat);
     halo.position.set(0, 0, -1); // Slightly behind the sphere
@@ -890,7 +891,8 @@ class SeiltanzerGame {
     });
     this.policeBlueGlow = new THREE.Mesh(sirenGeo, blueMat);
     this.policeBlueGlow.rotation.x = -Math.PI / 2;
-    this.policeBlueGlow.position.set(-6, 0, 0); // blue offset
+    this.policeBlueGlow.position.set(-6, 2, 0); // blue offset, Y+2 to sit above cloud planes
+    this.policeBlueGlow.renderOrder = 60; // Render AFTER the cloud planes (which are 20-49)
     this.policeGroup.add(this.policeBlueGlow);
 
     const redMat = new THREE.MeshBasicMaterial({
@@ -903,7 +905,8 @@ class SeiltanzerGame {
     });
     this.policeRedGlow = new THREE.Mesh(sirenGeo, redMat);
     this.policeRedGlow.rotation.x = -Math.PI / 2;
-    this.policeRedGlow.position.set(6, 0, 0); // red offset
+    this.policeRedGlow.position.set(6, 2, 0); // red offset, Y+2 to sit above cloud planes
+    this.policeRedGlow.renderOrder = 60; // Render AFTER the cloud planes (which are 20-49)
     this.policeGroup.add(this.policeRedGlow);
   }
 
@@ -2863,19 +2866,20 @@ class SeiltanzerGame {
         this.policeZ += this.policeSpeed * dt + moveZ;
         this.policeGroup.position.z = this.policeZ;
 
-        // Dynamic Siren Sound Volume (Fade-in over 2s, hold, fade-out after 9s over 2s)
+        // Dynamic Siren Sound Volume (Fade-in over 1.5s, hold briefly, then long gradual fade-out
+        // starting at 4s over 5 seconds to simulate the car driving further and further away)
         if (this.policeSound) {
           let targetVol = 0.65;
-          if (this.policeElapsedTime < 2.0) {
-            targetVol *= (this.policeElapsedTime / 2.0); // Fade in over 2s
-          } else if (this.policeElapsedTime >= 9.0) {
-            const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 9.0) / 2.0);
-            targetVol *= (1.0 - fadeProgress); // Fade out over 2s (between 9s and 11s)
+          if (this.policeElapsedTime < 1.5) {
+            targetVol *= (this.policeElapsedTime / 1.5); // Fade in over 1.5s
+          } else if (this.policeElapsedTime >= 4.0) {
+            const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 4.0) / 5.0);
+            targetVol *= (1.0 - fadeProgress); // Long gradual fade-out over 5s (4s to 9s)
           }
           // Turn off sound immediately if paused or game state is not playing
           this.policeSound.volume = targetVol * (this.sfxEnabled && this.state === GAME_STATE.PLAYING ? 1 : 0);
 
-          if (this.policeElapsedTime >= 11.0 && !this.policeSound.paused) {
+          if (this.policeElapsedTime >= 9.0 && !this.policeSound.paused) {
             this.policeSound.pause();
           }
         }
@@ -2897,9 +2901,9 @@ class SeiltanzerGame {
           this.policeRedGlow.material.opacity = 0.0;
         }
 
-        // Check if finished (out of bounds relative to camera viewport, or timed out at 11s)
+        // Check if finished (out of bounds relative to camera viewport, or timed out at 9s)
         const outOfBounds = this.policeZ < -780;
-        if (outOfBounds || this.policeElapsedTime >= 11.0) {
+        if (outOfBounds || this.policeElapsedTime >= 9.5) {
           this.policeActive = false;
           this.policeGroup.visible = false;
           // Set random timer for the next chase (min 15 seconds, up to 35 seconds)
