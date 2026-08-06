@@ -1655,7 +1655,7 @@ class SeiltanzerGame {
     canvas.addEventListener('touchmove', (e) => {
       if (e.touches.length > 0) {
         const deltaX = e.touches[0].clientX - touchStartX;
-        const norm = Math.max(-1.0, Math.min(1.0, deltaX / 120.0));
+        const norm = Math.max(-1.0, Math.min(1.0, -deltaX / 120.0));
         this.targetTiltInput = norm;
       }
     }, { passive: true });
@@ -1893,8 +1893,8 @@ class SeiltanzerGame {
       this.lastRawGamma = raw;
 
       const delta = raw - this.calibrationGamma;
-      // ÷35 so ±35° = full tilt input (prevents hyper-sensitivity)
-      this.targetTiltInput = Math.max(-1.0, Math.min(1.0, delta / 35.0));
+      // ÷35 so ±35° = full tilt input (inverted logic per user preference)
+      this.targetTiltInput = Math.max(-1.0, Math.min(1.0, -delta / 35.0));
     };
 
     window.addEventListener('deviceorientation', handleOrientation, true);
