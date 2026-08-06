@@ -496,6 +496,9 @@ class SeiltanzerGame {
     halo.position.set(0, 0, -1); // Slightly behind the sphere
     moonGroup.add(halo);
 
+    // Add starry night sky matching the moon
+    this.buildStars();
+
     // 1. Tightrope Wire with Realistic Twisted Steel Cable Texture Pattern
     const textureLoader = new THREE.TextureLoader();
     const ropeTexture = textureLoader.load('assets/rope_texture.png');
@@ -783,19 +786,42 @@ class SeiltanzerGame {
     this.worldGroup.add(this.particles);
   }
 
+  buildStars() {
+    const starCount = 400;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(starCount * 3);
+
+    for (let i = 0; i < starCount; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 600;
+      positions[i * 3 + 1] = 25 + Math.random() * 140; // High in the night sky
+      positions[i * 3 + 2] = -50 - Math.random() * 450; // Scattered background
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const starMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1.4,
+      transparent: true,
+      opacity: 0.85,
+      fog: false
+    });
+
+    const stars = new THREE.Points(geometry, starMat);
+    this.scene.add(stars);
+  }
+
   createCloudTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
 
-    // Create a radial gradient for whitish-grey fluffy clouds that reflect the world's cyan and pink colors
+    // Create a radial gradient for pure white-grey natural fog/clouds (no neon red/blue reflections)
     const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    grad.addColorStop(0, 'rgba(235, 238, 245, 0.98)'); // Dense whitish-grey cloud core
-    grad.addColorStop(0.2, 'rgba(205, 212, 224, 0.85)'); // Soft grey cloud body
-    grad.addColorStop(0.5, 'rgba(0, 242, 254, 0.28)'); // Cyan neon reflection
-    grad.addColorStop(0.8, 'rgba(255, 0, 127, 0.22)'); // Pink sunset reflection
-    grad.addColorStop(1, 'rgba(22, 19, 45, 0)'); // Fade to transparent at the edges
+    grad.addColorStop(0, 'rgba(240, 242, 248, 1.0)');    // Soft white cloud center
+    grad.addColorStop(0.3, 'rgba(200, 205, 218, 0.90)');  // Soft cloud grey
+    grad.addColorStop(0.7, 'rgba(130, 135, 150, 0.45)');  // Natural mist grey
+    grad.addColorStop(1, 'rgba(22, 19, 45, 0.0)');       // Smooth transparent edge
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 256, 256);
 
@@ -835,15 +861,23 @@ class SeiltanzerGame {
     this.clouds = [];
     const cloudTexture = this.createCloudTexture();
 
-    // Create 30 massive, overlapping cloud planes to form a thick, opaque cloud deck
-    for (let i = 0; i < 30; i++) {
+    // Create 36 overlapping cloud planes spread vertically to form a realistic fog deck
+    // with decreasing transparency downwards (deeper = more opaque)
+    for (let i = 0; i < 36; i++) {
       const size = 180 + Math.random() * 80;
       const cloudGeo = new THREE.PlaneGeometry(size, size);
-      
+
+      // Y position between -36 and -51 (top to bottom fog layers)
+      const depthRatio = i / 36; // 0 at top, 1 at bottom
+      const y = -36 - depthRatio * 15;
+
+      // Lower layers get higher opacity (decreasing transparency downwards for a true fog deck)
+      const layerOpacity = 0.65 + depthRatio * 0.35;
+
       const cloudMat = new THREE.MeshBasicMaterial({
         map: cloudTexture,
         transparent: true,
-        opacity: 0.95 + Math.random() * 0.05, // Highly opaque
+        opacity: layerOpacity,
         depthWrite: false,
         blending: THREE.NormalBlending
       });
@@ -855,10 +889,8 @@ class SeiltanzerGame {
       // Assign a fixed stable renderOrder to prevent dynamic transparency sorting jitter (z-fighting)
       cloud.renderOrder = 20 + i;
 
-      // Position them much lower to cover the building bases (which start at Y = -50 or deeper)
       const x = (Math.random() - 0.5) * 180;
-      const y = -40 - Math.random() * 5; // Y between -40 and -45
-      const z = -i * 27;
+      const z = -i * 22;
 
       cloud.position.set(x, y, z);
 
@@ -879,20 +911,21 @@ class SeiltanzerGame {
     this.worldGroup.add(this.policeGroup);
 
     const sirenTexture = this.createSirenTexture();
-    const sirenGeo = new THREE.PlaneGeometry(100, 100); // 100 units wide for a giant blurry fog diffusion glow
+    const sirenGeo = new THREE.PlaneGeometry(45, 45); // 45 units wide to fit street corridors realistically
 
     const blueMat = new THREE.MeshBasicMaterial({
       map: sirenTexture,
       color: 0x0055ff,
       transparent: true,
       opacity: 0.0,
+      depthTest: true,  // Enforce Z-buffer depth testing against opaque skyscraper walls
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
     this.policeBlueGlow = new THREE.Mesh(sirenGeo, blueMat);
     this.policeBlueGlow.rotation.x = -Math.PI / 2;
-    this.policeBlueGlow.position.set(-6, 2, 0); // blue offset, Y+2 to sit above cloud planes
-    this.policeBlueGlow.renderOrder = 60; // Render AFTER the cloud planes (which are 20-49)
+    this.policeBlueGlow.position.set(-3, 0, 0); // blue offset
+    this.policeBlueGlow.renderOrder = 15; // Render after opaque buildings (0) but before clouds (20+) for realistic skyscraper occlusion
     this.policeGroup.add(this.policeBlueGlow);
 
     const redMat = new THREE.MeshBasicMaterial({
@@ -900,13 +933,14 @@ class SeiltanzerGame {
       color: 0xff0044,
       transparent: true,
       opacity: 0.0,
+      depthTest: true,  // Enforce Z-buffer depth testing against opaque skyscraper walls
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
     this.policeRedGlow = new THREE.Mesh(sirenGeo, redMat);
     this.policeRedGlow.rotation.x = -Math.PI / 2;
-    this.policeRedGlow.position.set(6, 2, 0); // red offset, Y+2 to sit above cloud planes
-    this.policeRedGlow.renderOrder = 60; // Render AFTER the cloud planes (which are 20-49)
+    this.policeRedGlow.position.set(3, 0, 0); // red offset
+    this.policeRedGlow.renderOrder = 15; // Render after opaque buildings (0) but before clouds (20+) for realistic skyscraper occlusion
     this.policeGroup.add(this.policeRedGlow);
   }
 
@@ -1355,6 +1389,7 @@ class SeiltanzerGame {
         if (e) e.preventDefault();
         // Guard against touch-through from pause/home button
         if (this.homeClickGuard) return;
+        this.requestFullscreen();
         if (this.state === GAME_STATE.START || this.state === GAME_STATE.GAMEOVER) {
           const savedName = localStorage.getItem('seiltanzer_username');
           if (savedName && savedName.trim().length > 0) {
@@ -1378,6 +1413,7 @@ class SeiltanzerGame {
           this.showToast("Bitte gib deinen Namen ein!");
           return;
         }
+        this.requestFullscreen();
         localStorage.setItem('seiltanzer_username', name);
         if (this.dom.playerNameInput) {
           this.dom.playerNameInput.value = name;
@@ -1411,24 +1447,48 @@ class SeiltanzerGame {
       elem.addEventListener('pointerdown', handler);
     };
 
-    if (this.dom.btnAction) {
-      const handler = (e) => {
-        if (e) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-        this.handleActionClick();
-      };
-      this.dom.btnAction.addEventListener('pointerdown', handler);
-    }
+    // Fullscreen Screen-Tap Handler for Action (Squat/Jump) during gameplay
+    // Excludes top header area (clientY < 80) for pause button / HUD
+    const handleScreenTap = (e) => {
+      if (this.state !== GAME_STATE.PLAYING) return;
+      const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 100);
+      if (clientY < 80) return; // Ignore taps in upper 80px header area
+      if (e.target && (e.target.closest('button') || e.target.closest('.modal-screen') || e.target.closest('#hud-header'))) {
+        return;
+      }
+      if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+      this.handleActionClick();
+    };
+
+    window.addEventListener('pointerdown', handleScreenTap);
+
     bindBtnClick(this.dom.btnPause, () => this.pauseGame());
     bindBtnClick(this.dom.btnResume, () => this.resumeGame());
     bindBtnClick(this.dom.btnToggleMusic, () => this.toggleMusic());
     bindBtnClick(this.dom.btnToggleSFX, () => this.toggleSFX());
     bindBtnClick(this.dom.btnPauseHome, () => this.returnToHome());
 
-
     this.bindGyro();
+  }
+
+  requestFullscreen() {
+    try {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        docEl.requestFullscreen().catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        docEl.webkitRequestFullscreen();
+      } else if (docEl.mozRequestFullScreen) {
+        docEl.mozRequestFullScreen();
+      } else if (docEl.msRequestFullscreen) {
+        docEl.msRequestFullscreen();
+      }
+    } catch(err) {
+      // Ignored if user cancels or browser blocks fullscreen
+    }
   }
 
   requestSensorsAndStart() {
@@ -2834,7 +2894,7 @@ class SeiltanzerGame {
         this.policeTimer = (this.policeTimer || 10.0) - dt;
         if (this.policeTimer <= 0) {
           this.policeActive = true;
-          this.policeGroup.visible = true;
+          this.policeGroup.visible = false; // Hide lights initially for 1.5s sound lead-in
           this.policeElapsedTime = 0;
           this.sirenTime = 0;
 
@@ -2845,9 +2905,9 @@ class SeiltanzerGame {
           this.policeZ = -15;
           this.policeSpeed = -85; // Calibrated so that it speeds away and disappears in ~9-11 seconds
 
-          this.policeGroup.position.set(this.policeX, -38.5, this.policeZ);
+          this.policeGroup.position.set(this.policeX, -42.0, this.policeZ);
 
-          // Play the siren sound
+          // Play the siren sound 1.5s BEFORE lights become visible
           if (this.policeSound && this.sfxEnabled && this.state === GAME_STATE.PLAYING) {
             this.policeSound.volume = 0.0;
             this.policeSound.currentTime = 0;
@@ -2862,48 +2922,59 @@ class SeiltanzerGame {
       } else {
         this.policeElapsedTime += dt;
 
-        // Move along Z, accounting for city scrolling (moveZ) so it stays anchored to the streets
-        this.policeZ += this.policeSpeed * dt + moveZ;
-        this.policeGroup.position.z = this.policeZ;
+        // Sound starts at t=0, light becomes visible and starts driving at t=1.5s (1.5s after sound starts)
+        const lightDelay = 1.5;
+        if (this.policeElapsedTime >= lightDelay) {
+          this.policeGroup.visible = true;
+          // Move along Z, accounting for city scrolling (moveZ) so it stays anchored to the streets
+          this.policeZ += this.policeSpeed * dt + moveZ;
+          this.policeGroup.position.z = this.policeZ;
+        } else {
+          this.policeGroup.visible = false;
+        }
 
-        // Dynamic Siren Sound Volume (Fade-in over 1.5s, hold briefly, then long gradual fade-out
-        // starting at 4s over 5 seconds to simulate the car driving further and further away)
+        // Dynamic Siren Sound Volume:
+        // Fade-in over first 1.5s (before light appears)
+        // Hold volume from 1.5s to 5.5s
+        // Gradual fade-out over 5s (5.5s to 10.5s) as car drives into distance
         if (this.policeSound) {
           let targetVol = 0.65;
           if (this.policeElapsedTime < 1.5) {
-            targetVol *= (this.policeElapsedTime / 1.5); // Fade in over 1.5s
-          } else if (this.policeElapsedTime >= 4.0) {
-            const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 4.0) / 5.0);
-            targetVol *= (1.0 - fadeProgress); // Long gradual fade-out over 5s (4s to 9s)
+            targetVol *= (this.policeElapsedTime / 1.5); // Fade in over 1.5s before light appears
+          } else if (this.policeElapsedTime >= 5.5) {
+            const fadeProgress = Math.min(1.0, (this.policeElapsedTime - 5.5) / 5.0);
+            targetVol *= (1.0 - fadeProgress); // Long gradual fade-out over 5s (5.5s to 10.5s)
           }
           // Turn off sound immediately if paused or game state is not playing
           this.policeSound.volume = targetVol * (this.sfxEnabled && this.state === GAME_STATE.PLAYING ? 1 : 0);
 
-          if (this.policeElapsedTime >= 9.0 && !this.policeSound.paused) {
+          if (this.policeElapsedTime >= 10.5 && !this.policeSound.paused) {
             this.policeSound.pause();
           }
         }
 
-        // Flash sirens rapidly (rapid blue/red alternate)
-        this.sirenTime += dt;
-        const cycle = Math.floor(this.sirenTime * 16) % 4; // 16 Hz cycle
-        if (cycle === 0) {
-          this.policeBlueGlow.material.opacity = 0.90;
-          this.policeRedGlow.material.opacity = 0.0;
-        } else if (cycle === 1) {
-          this.policeBlueGlow.material.opacity = 0.0;
-          this.policeRedGlow.material.opacity = 0.0;
-        } else if (cycle === 2) {
-          this.policeBlueGlow.material.opacity = 0.0;
-          this.policeRedGlow.material.opacity = 0.90;
-        } else {
-          this.policeBlueGlow.material.opacity = 0.0;
-          this.policeRedGlow.material.opacity = 0.0;
+        // Flash sirens rapidly (rapid blue/red alternate) when light is visible
+        if (this.policeElapsedTime >= lightDelay) {
+          this.sirenTime += dt;
+          const cycle = Math.floor(this.sirenTime * 16) % 4; // 16 Hz cycle
+          if (cycle === 0) {
+            this.policeBlueGlow.material.opacity = 0.90;
+            this.policeRedGlow.material.opacity = 0.0;
+          } else if (cycle === 1) {
+            this.policeBlueGlow.material.opacity = 0.0;
+            this.policeRedGlow.material.opacity = 0.0;
+          } else if (cycle === 2) {
+            this.policeBlueGlow.material.opacity = 0.0;
+            this.policeRedGlow.material.opacity = 0.90;
+          } else {
+            this.policeBlueGlow.material.opacity = 0.0;
+            this.policeRedGlow.material.opacity = 0.0;
+          }
         }
 
-        // Check if finished (out of bounds relative to camera viewport, or timed out at 9s)
+        // Check if finished (out of bounds relative to camera viewport, or timed out at 11s)
         const outOfBounds = this.policeZ < -780;
-        if (outOfBounds || this.policeElapsedTime >= 9.5) {
+        if (outOfBounds || this.policeElapsedTime >= 11.0) {
           this.policeActive = false;
           this.policeGroup.visible = false;
           // Set random timer for the next chase (min 15 seconds, up to 35 seconds)
