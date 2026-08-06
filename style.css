@@ -100,16 +100,15 @@ html, body {
   align-items: center;
   gap: 12px;
   margin-top: 2px;
-  background: rgba(10, 14, 26, 0.45);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
   padding: 6px 16px;
-  border-radius: 12px;
-  font-size: 13px;
+  font-size: 15px;
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.95);
+  box-shadow: none;
 }
 
 .hud-sub-item {
@@ -388,7 +387,7 @@ html, body {
   font-weight: 900;
   letter-spacing: -1px;
   margin-bottom: 8px;
-  background: linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #ff007f 100%);
+  background: linear-gradient(to right, #00f2fe 0%, #4facfe 25%, #ff007f 75%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   text-transform: uppercase;
@@ -403,6 +402,8 @@ html, body {
 }
 
 .btn-primary {
+  position: relative;
+  z-index: 1;
   background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
   color: #040914;
   font-family: inherit;
@@ -414,20 +415,49 @@ html, body {
   border-radius: 40px;
   border: none;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(0, 242, 254, 0.4);
+  box-shadow: 0 10px 25px rgba(0, 242, 254, 0.3);
   transition: all 0.2s ease;
   margin-top: 10px;
   pointer-events: auto !important;
   touch-action: manipulation;
 }
 
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  background: linear-gradient(135deg, #ff007f, #00f2fe);
+  border-radius: 46px;
+  z-index: -1;
+  filter: blur(24px);
+  opacity: 0.65;
+  animation: glow-move 8s ease-in-out infinite;
+  transition: opacity 0.3s ease, filter 0.3s ease;
+}
+
 .btn-primary:hover {
   transform: translateY(-2px) scale(1.03);
-  box-shadow: 0 15px 30px rgba(0, 242, 254, 0.6);
+  box-shadow: 0 15px 30px rgba(0, 242, 254, 0.4);
+}
+
+.btn-primary:hover::before {
+  filter: blur(28px);
+  opacity: 0.90;
 }
 
 .btn-primary:active {
   transform: translateY(1px) scale(0.98);
+}
+
+@keyframes glow-move {
+  0% { transform: translate(-16px, -4px); }
+  25% { transform: translate(16px, 4px); }
+  50% { transform: translate(-4px, 12px); }
+  75% { transform: translate(4px, -12px); }
+  100% { transform: translate(-16px, -4px); }
 }
 
 .control-tips {
@@ -903,7 +933,7 @@ html, body {
   font-size: 24px;
   font-weight: 900;
   letter-spacing: 1px;
-  background: linear-gradient(135deg, #00f2fe, #ff007f);
+  background: linear-gradient(to right, #00f2fe 0%, #4facfe 25%, #ff007f 75%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 6px;
