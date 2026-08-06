@@ -1642,6 +1642,11 @@ class SeiltanzerGame {
       if (!this.isJumping) this.triggerJump();
       this.triggerTrick();
     });
+    if (this.dom.btnAction) {
+      bindPointerAction(this.dom.btnAction, () => {
+        this.handleActionClick();
+      });
+    }
 
     // 3. Touch Swipe Drag Fallback
     let touchStartX = 0;
@@ -1738,12 +1743,15 @@ class SeiltanzerGame {
       if (this.state !== GAME_STATE.PLAYING) return;
       const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 100);
       if (clientY < 80) return; // Ignore taps in upper 80px header area
-      if (e.target && (e.target.closest('button') || e.target.closest('.modal-screen') || e.target.closest('#hud-header'))) {
+      // Ignore clicks on control buttons EXCEPT btnAction
+      if (e.target && e.target.closest('button') && !e.target.closest('#btn-action')) {
         return;
       }
-      if (e) {
+      if (e.target && (e.target.closest('.modal-screen') || e.target.closest('#hud-header'))) {
+        return;
+      }
+      if (e && e.cancelable) {
         e.stopPropagation();
-        e.preventDefault();
       }
 
       this.isPointerDown = true;
@@ -1775,9 +1783,19 @@ class SeiltanzerGame {
       }
     };
 
-    window.addEventListener('pointerdown', handleScreenPointerDown);
-    window.addEventListener('pointerup', handleScreenPointerUp);
-    window.addEventListener('pointercancel', handleScreenPointerUp);
+    window.addEventListener('pointerdown', handleScreenPointerDown, { passive: true });
+    window.addEventListener('pointerup', handleScreenPointerUp, { passive: true });
+    window.addEventListener('pointercancel', handleScreenPointerUp, { passive: true });
+    window.addEventListener('touchstart', (e) => {
+      if (this.state === GAME_STATE.PLAYING && e.touches.length === 1) {
+        handleScreenPointerDown(e.touches[0]);
+      }
+    }, { passive: true });
+    window.addEventListener('touchend', (e) => {
+      if (this.state === GAME_STATE.PLAYING) {
+        handleScreenPointerUp(e);
+      }
+    }, { passive: true });
 
     bindBtnClick(this.dom.btnPause, () => this.pauseGame());
     bindBtnClick(this.dom.btnResume, () => this.resumeGame());
@@ -1972,10 +1990,15 @@ class SeiltanzerGame {
   }
 
   playTrickSound() {
-    if (!this.audioCtx) return;
+    if (!this.audioCtx || !this.sfxEnabled) return;
     this.playAudioTone(523.25, 'sine', 0.15, 0.15); // C5
     setTimeout(() => this.playAudioTone(659.25, 'sine', 0.15, 0.15), 100); // E5
     setTimeout(() => this.playAudioTone(783.99, 'sine', 0.25, 0.2), 200); // G5
+  }
+
+  playLandSound() {
+    if (!this.audioCtx || !this.sfxEnabled) return;
+    this.playAudioTone(160 + Math.random() * 20, 'triangle', 0.10, 0.12);
   }
 
   playFallSound() {
@@ -2039,6 +2062,19 @@ class SeiltanzerGame {
     this.jumpVY = 0;
     this.windForce = 0;
     this.windTimer = 0;
+    this.pendingTrick = null;
+    this.inAirTrick = null;
+    this.isSquatting = false;
+    this.isHoldingSquat = false;
+    this.isPointerDown = false;
+    this.clickCount = 0;
+    if (this.clickTimer) clearTimeout(this.clickTimer);
+
+    // Verify touch & canvas readiness
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) canvasContainer.style.display = 'block';
+    const canvas = document.getElementById('game-canvas');
+    if (canvas) canvas.style.pointerEvents = 'auto';
     
     // Reset Character Position & Rotations
     this.characterGroup.position.set(0, 0, 0);
@@ -2091,9 +2127,6 @@ class SeiltanzerGame {
       this.dom.gameoverModal.classList.add('hidden');
       this.dom.gameoverModal.style.display = 'none';
     }
-    // Show the 3D canvas when game starts
-    const canvasContainer = document.getElementById('canvas-container');
-    if (canvasContainer) canvasContainer.style.display = 'block';
   }
 
   triggerJump() {
@@ -2133,7 +2166,7 @@ class SeiltanzerGame {
   }
 
   triggerSpecificTrick(typeId) {
-    if (this.state !== GAME_STATE.PLAYING || this.inAirTrick || this.isSquatting) return;
+    if (this.state !== GAME_STATE.PLAYING || this.inAirTrick || this.isSquatting || this.pendingTrick) return;
 
     const trickMap = {
       'spin': { id: 'spin', name: 'SPRUNG & DREHUNG', points: 350 },
@@ -2153,46 +2186,18 @@ class SeiltanzerGame {
         this.triggerJump();
       }
       this.inAirTrick = trick;
+      this.comboCount++;
+      const pointsGained = trick.points * this.comboCount;
+      // Defer points, banner & sound until character completes landing!
+      this.pendingTrick = { id: trick.id, name: trick.name, points: pointsGained };
     }
-
-    this.tricksCount++;
-    this.comboCount++;
-    const pointsGained = trick.points * this.comboCount;
-    this.score += pointsGained;
-
-    this.showComboBanner(trick.name, `+${pointsGained} PTS`);
-    this.playTrickSound();
   }
 
   triggerTrick() {
-    if (this.state !== GAME_STATE.PLAYING || this.inAirTrick || this.isSquatting) return;
-    
-    const tricks = [
-      { id: 'spin', name: 'SPRUNG & DREHUNG', points: 350 },
-      { id: 'flip', name: 'SALTO', points: 500 },
-      { id: 'squat', name: 'IN DIE HOCKE GEHEN', points: 400 }
-    ];
-
-    const trick = tricks[Math.floor(Math.random() * tricks.length)];
-    
-    if (trick.id === 'squat') {
-      this.isSquatting = true;
-      this.squatTimer = 0;
-      this.inAirTrick = trick;
-    } else {
-      if (!this.isJumping) {
-        this.triggerJump();
-      }
-      this.inAirTrick = trick;
-    }
-
-    this.tricksCount++;
-    this.comboCount++;
-    const pointsGained = trick.points * this.comboCount;
-    this.score += pointsGained;
-
-    this.showComboBanner(trick.name, `+${pointsGained} PTS`);
-    this.playTrickSound();
+    if (this.state !== GAME_STATE.PLAYING || this.inAirTrick || this.isSquatting || this.pendingTrick) return;
+    const tricks = ['spin', 'flip', 'squat'];
+    const typeId = tricks[Math.floor(Math.random() * tricks.length)];
+    this.triggerSpecificTrick(typeId);
   }
 
   showComboBanner(name, pts) {
@@ -2411,14 +2416,15 @@ class SeiltanzerGame {
     let input = this.filteredTiltInput;
 
     // 2. Realistic Multi-Stage Wind Gust System:
-    // - Directional Persistence: 75% chance to maintain same side for 2-4 consecutive gusts
+    // - Rare & Powerful: Long quiet breaks (6 - 12s) between wind gusts so wind feels special & intense!
+    // - Directional Persistence: 75% chance to maintain same side for consecutive gusts
     // - Stage 0 (0-12s): No wind
-    // - Stage 1 (Intro Police, eventCount >= 1): Medium breeze (0.35 - 0.55)
-    // - Stage 2 (Post-Drone / Sekunde 50+, eventCount >= 2): Full spectrum variance (0.35 - 1.15) with light, medium & storm gusts!
+    // - Stage 1 (Intro Police, eventCount >= 1): Strong breeze (0.60 - 0.85)
+    // - Stage 2 (Post-Drone / Sekunde 50+, eventCount >= 2): Powerful gusts (0.75 - 1.50) with heavy storm & gale force gusts!
     if ((this.eventCount || 0) >= 1) {
       this.windTimer -= dt;
       if (this.windTimer <= 0) {
-        if (Math.random() < 0.48) {
+        if (Math.random() < 0.40) {
           // Determine directional persistence: 75% keep last direction, 25% change
           if (this.lastWindDir === undefined || Math.random() < 0.25) {
             this.lastWindDir = Math.random() > 0.5 ? 1 : -1;
@@ -2426,38 +2432,38 @@ class SeiltanzerGame {
           const dir = this.lastWindDir;
 
           const isFullWindUnlocked = (this.eventCount || 0) >= 2;
-          let mag = 0.45;
+          let mag = 0.70;
 
           if (isFullWindUnlocked) {
-            // Stage 2: Full variance across light, medium, strong, and gale force gusts!
+            // Stage 2: Powerful gusts (0.75 - 1.50)
             const roll = Math.random();
             if (roll < 0.35) {
-              // Medium breeze (0.35 - 0.55)
-              mag = 0.35 + Math.random() * 0.20;
-              this.windTimer = 2.5 + Math.random() * 2.5;
+              // Medium-Strong gust (0.75 - 0.95)
+              mag = 0.75 + Math.random() * 0.20;
+              this.windTimer = 3.0 + Math.random() * 2.5;
             } else if (roll < 0.80) {
-              // Strong gust (0.60 - 0.88)
-              mag = 0.60 + Math.random() * 0.28;
-              this.windTimer = 3.5 + Math.random() * 3.5;
+              // Heavy Storm gust (0.95 - 1.25)
+              mag = 0.95 + Math.random() * 0.30;
+              this.windTimer = 4.0 + Math.random() * 3.0;
             } else {
-              // Heavy storm gust (0.90 - 1.15)
-              mag = 0.90 + Math.random() * 0.25;
-              this.windTimer = 4.5 + Math.random() * 3.0;
+              // Gale Force Hurricane gust (1.25 - 1.50)
+              mag = 1.25 + Math.random() * 0.25;
+              this.windTimer = 5.0 + Math.random() * 3.0;
             }
 
             // Trigger Toast warning on first heavy gust
-            if (mag >= 0.70 && !this.hasWarnedStrongWind) {
+            if (mag >= 0.90 && !this.hasWarnedStrongWind) {
               this.hasWarnedStrongWind = true;
               this.showToast('STARKER SEITENWIND!\nGegenlenken!');
             }
           } else {
-            // Stage 1: Medium breeze (0.35 - 0.55)
-            mag = 0.35 + Math.random() * 0.20;
-            this.windTimer = 3.0 + Math.random() * 2.5;
+            // Stage 1: Strong breeze (0.60 - 0.85)
+            mag = 0.60 + Math.random() * 0.25;
+            this.windTimer = 3.5 + Math.random() * 2.5;
           }
 
           this.windForce = mag * dir;
-          const isHeavyGust = mag >= 0.65;
+          const isHeavyGust = mag >= 0.85;
 
           if (this.dom && this.dom.windIndicator) {
             this.dom.windIndicator.classList.add('active');
@@ -2473,8 +2479,9 @@ class SeiltanzerGame {
             }
           }
         } else {
+          // Quiet calm break between winds (6.0 to 12.0s)
           this.windForce = 0;
-          this.windTimer = 2.0 + Math.random() * 2.0;
+          this.windTimer = 6.0 + Math.random() * 6.0;
           if (this.dom && this.dom.windIndicator) {
             this.dom.windIndicator.classList.remove('active');
             this.dom.windIndicator.classList.remove('strong');
@@ -2550,6 +2557,7 @@ class SeiltanzerGame {
     // 4. Fall Check
     if (Math.abs(this.balance) > 1.0) {
       this.state = GAME_STATE.FALLING;
+      this.pendingTrick = null;
       this.stopMusic();
       this.playFallSound();
       if (this.windSoundGain) {
@@ -2646,6 +2654,14 @@ class SeiltanzerGame {
          this.leftFootBone, this.rightFootBone, this.leftArmBone, this.rightArmBone].forEach(b => {
           if (b && b.userData.initQ) b.quaternion.copy(b.userData.initQ);
         });
+        if (this.inAirTrick && this.inAirTrick.id === 'squat') {
+          this.tricksCount++;
+          this.comboCount++;
+          const pointsGained = this.inAirTrick.points * this.comboCount;
+          this.score += pointsGained;
+          this.showComboBanner(this.inAirTrick.name, `+${pointsGained} PTS`);
+          this.playTrickSound();
+        }
         this.inAirTrick = null;
       }
     } else if (this.isJumping) {
@@ -2978,18 +2994,30 @@ class SeiltanzerGame {
           this.balance += Math.sign(this.balance) * 0.35;
         }
 
+        // Award trick points, combo banner and sound EXACTLY ON SAFE LANDING!
+        if (this.pendingTrick) {
+          this.tricksCount++;
+          this.score += this.pendingTrick.points;
+          this.showComboBanner(this.pendingTrick.name, `+${this.pendingTrick.points} PTS`);
+          this.playTrickSound();
+          this.playLandSound();
+          this.pendingTrick = null;
+        } else {
+          this.playLandSound();
+        }
+
+        this.inAirTrick = null;
         this.leftFootWireZ = 0.25;
         this.rightFootWireZ = -0.25;
         this.stepTimer = 0;
         this.stanceLeg = 'right';
         this.swingStartWireZ = 0.25;
         this.swingTargetWireZ = -0.45;
-
-        this.inAirTrick = null;
       }
     }
   }
-  let stepSine = 0;
+
+    let stepSine = 0;
     // 6.5 SQUAT (HOCKE) HOLD POSE OR LANDING ABSORPTION OR GAIT
     const targetSquat = (this.isHoldingSquat && !this.isJumping) ? 1.0 : 0.0;
     this.squatFactor = THREE.MathUtils.lerp(this.squatFactor || 0, targetSquat, 12 * dt);
